@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -8,7 +9,7 @@ import aiohttp
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
-from homeassistant.core import ServiceCall, callback
+from homeassistant.core import ServiceCall, SupportsResponse, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
@@ -16,10 +17,12 @@ from .const import (
     CONF_API_KEY,
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
+    CONF_FRIENDS,
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
     DOMAIN,
     KAKAO_TALK_API_ENDPOINT,
+    SERVICE_LIST_FRIENDS,
     SERVICE_SEND_MESSAGE,
     SESSION_FILE,
 )
@@ -39,6 +42,8 @@ API_FRIENDS_SEND = "https://kapi.kakao.com/v1/api/talk/friends/message/default/s
 FRIENDS_PAGE_SIZE = 100
 # Kakao limits the number of receivers per friends-message request.
 FRIENDS_SEND_CHUNK = 5
+# How long the friends list is cached before it is fetched again.
+FRIENDS_CACHE_SECONDS = 3600
 
 DEFAULT_BUTTON_TITLE = "View"
 
@@ -67,7 +72,10 @@ class KakaoConfig:
         self._button_title = config.get(CONF_BUTTON_TITLE) or DEFAULT_BUTTON_TITLE
         self._host = config.get(CONF_REDIRECT_URI)
         self._send_to_friends = config.get(CONF_SEND_TO_FRIENDS)
-        self._friends = []
+        # Optional filter: nicknames or uuids to send to. Empty means everyone returned.
+        self._friend_filter = [str(f).strip().lower() for f in config.get(CONF_FRIENDS) or []]
+        self._friends = []  # list of {"uuid": ..., "nickname": ...}
+        self._friends_fetched = 0.0
         self._access_token = None
         self._refresh_token = None
 
@@ -149,6 +157,7 @@ class KakaoConfig:
         self._access_token = res["access_token"]
         self._refresh_token = res.get("refresh_token", self._refresh_token)
         self._friends = []
+        self._friends_fetched = 0.0
         await self.save_refresh_token()
         return res
 
@@ -199,17 +208,81 @@ class KakaoConfig:
                     res = json.loads(await r.text(encoding="utf-8"))
             except (aiohttp.ClientError, ValueError) as exception:
                 _LOGGER.warning("KakaoTalk [Friends] request failed: %s", exception)
-                break
+                return
             if "code" in res:
                 _LOGGER.warning("KakaoTalk [Friends] Error : %s", res)
-                break
+                return
             elements = res.get("elements", [])
-            friends.extend(f["uuid"] for f in elements if "uuid" in f)
+            friends.extend(
+                {"uuid": f["uuid"], "nickname": f.get("profile_nickname", "")}
+                for f in elements
+                if "uuid" in f
+            )
             offset += len(elements)
             if not elements or offset >= res.get("total_count", 0):
                 break
         self._friends = friends
+        self._friends_fetched = time.monotonic()
         _LOGGER.debug("KakaoTalk [Friends] %d friends", len(friends))
+        if not friends:
+            _LOGGER.warning(
+                "Kakao returned no friends. Until the app is reviewed, only Kakao Talk "
+                "friends who are also app members and have consented to 'friends' and "
+                "'talk_message' are returned (see the README)."
+            )
+
+    async def async_list_friends(self):
+        """Fetch (fresh) and return the friends Kakao makes available to the app."""
+        if not await self._async_refresh_access_token():
+            return []
+        await self._async_get_friends()
+        return list(self._friends)
+
+    def _recipient_uuids(self):
+        if not self._friend_filter:
+            return [f["uuid"] for f in self._friends]
+        wanted = set(self._friend_filter)
+        matched = [
+            f
+            for f in self._friends
+            if f["uuid"].lower() in wanted or f["nickname"].strip().lower() in wanted
+        ]
+        found = {f["uuid"].lower() for f in matched} | {
+            f["nickname"].strip().lower() for f in matched
+        }
+        missing = wanted - found
+        if missing:
+            _LOGGER.warning(
+                "Configured friends not found in the friends Kakao returned: %s",
+                sorted(missing),
+            )
+        return [f["uuid"] for f in matched]
+
+    async def _async_send_to_friends(self, template):
+        stale = time.monotonic() - self._friends_fetched > FRIENDS_CACHE_SECONDS
+        if not self._friends or stale:
+            await self._async_get_friends()
+        uuids = self._recipient_uuids()
+        if not uuids:
+            _LOGGER.warning("send_to_friends is on but there are no recipients")
+            return
+        for i in range(0, len(uuids), FRIENDS_SEND_CHUNK):
+            chunk = uuids[i : i + FRIENDS_SEND_CHUNK]
+            res = await self._async_send(
+                API_FRIENDS_SEND,
+                {
+                    "receiver_uuids": json.dumps(chunk),
+                    "template_object": json.dumps(template, ensure_ascii=False),
+                },
+                "send to friends",
+            )
+            for failure in (res or {}).get("failure_info", []):
+                _LOGGER.error(
+                    "Kakao could not deliver to %s: %s (code %s)",
+                    failure.get("receiver_uuids"),
+                    failure.get("msg"),
+                    failure.get("code"),
+                )
 
     async def _async_send_template(self, template):
         if not await self._async_refresh_access_token():
@@ -222,18 +295,7 @@ class KakaoConfig:
         )
 
         if self._send_to_friends:
-            if not self._friends:
-                await self._async_get_friends()
-            for i in range(0, len(self._friends), FRIENDS_SEND_CHUNK):
-                chunk = self._friends[i : i + FRIENDS_SEND_CHUNK]
-                await self._async_send(
-                    API_FRIENDS_SEND,
-                    {
-                        "receiver_uuids": json.dumps(chunk),
-                        "template_object": json.dumps(template, ensure_ascii=False),
-                    },
-                    "send to friends",
-                )
+            await self._async_send_to_friends(template)
 
     def _link(self):
         return {"web_url": self._host, "mobile_web_url": self._host}
@@ -279,7 +341,18 @@ def async_register_http(hass, cfg):
             return
         await config.async_send_text(f"{title}\n\n{message}" if title else message)
 
+    async def list_friends_handler(call: ServiceCall):
+        """Return the friends (nickname + uuid) Kakao makes available to the app."""
+        friends = await config.async_list_friends()
+        return {"friends": friends}
+
     hass.services.async_register(DOMAIN, SERVICE_SEND_MESSAGE, send_message_handler)
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LIST_FRIENDS,
+        list_friends_handler,
+        supports_response=SupportsResponse.ONLY,
+    )
 
 
 class KakaoTalkView(HomeAssistantView):

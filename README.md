@@ -33,6 +33,8 @@ kakao_talk:
   redirect_uri: YOUR_HASSIO_URL       # include http:// or https:// and the port
   send_to_friends: False              # True also needs the 'friends' consent item
   button_title: View                  # optional; label of the button in the message
+  friends:                            # optional; only send to these friends (nickname or uuid)
+    - Alice
   
 notify:
   - platform: kakao_talk
@@ -115,3 +117,30 @@ actions:
 
 [hass]: https://home-assistant.io
 [hass2]: https://www.home-assistant.io/getting-started/automation/
+
+## Sending to friends
+
+Kakao only lets an app message friends one-to-one (not group chats), and the
+Message API is meant for messages a user sends themselves. Until Kakao approves
+the "Kakao Talk friend list / message" additional feature for a business app,
+you can still use it with a small group of testers:
+
+1. In the Kakao Developers console, under **Kakao Login > Consent items**, set
+   **Friends list in Kakao services** to *Consent during use*.
+2. Under **App > Member**, invite the sender's and every recipient's Kakao account
+   (by the email they log in with).
+3. The sender and each recipient must be Kakao Talk friends, and recipients must not
+   have a private profile.
+4. Each **recipient** links to your app once: in the console's **Tools > REST API test**,
+   choose *Retrieve user information*, get a token with the `friends` and `talk_message`
+   scopes, log in as the recipient and accept. Do **not** have recipients log in at
+   `/api/kakao_talk`; that page stores a single token, so a second login would replace yours.
+5. Set `send_to_friends: True`, restart, log in as the sender at `/api/kakao_talk` again
+   (this re-requests the `friends` scope), then run the `kakao_talk.list_friends` action
+   (Developer tools > Actions, with "Response" shown) to see nicknames and uuids.
+6. Optionally restrict recipients with the `friends:` list. Without it, every friend Kakao
+   returns receives each message.
+
+Limits before approval: 30 messages per day for the whole app, and 5 recipients per
+request (the integration batches automatically). Delivery failures, including the daily
+limit, are logged by the integration.

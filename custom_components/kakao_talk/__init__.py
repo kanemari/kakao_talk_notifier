@@ -11,6 +11,7 @@ from .const import (
     CONF_API_KEY,
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
+    CONF_FRIENDS,
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
 )
@@ -27,6 +28,7 @@ KAKAO_TALK_SCHEMA = vol.Schema(
         vol.Optional(CONF_BUTTON_TITLE, default="View"): cv.string,
         vol.Required(CONF_REDIRECT_URI): cv.string,
         vol.Optional(CONF_SEND_TO_FRIENDS, default=DEFAULT_SEND_TO_FRIENDS): cv.boolean,
+        vol.Optional(CONF_FRIENDS, default=[]): vol.All(cv.ensure_list, [cv.string]),
     },
     extra=vol.PREVENT_EXTRA,
 )

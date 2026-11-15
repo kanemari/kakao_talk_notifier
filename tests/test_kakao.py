@@ -47,3 +47,36 @@ async def test_flow(hass, hass_client_no_auth, aioclient_mock):
 
     await hass.services.async_call("notify", "kakao_talk", {"message": "m", "data": {"photo": [{"url": "http://x/y.png"}]}}, blocking=True)
     assert json.loads([c for c in aioclient_mock.mock_calls if "memo" in str(c[1])][-1][2]["template_object"])["object_type"] == "feed"
+
+
+FRIENDS = [{"uuid": "uA", "profile_nickname": "Alice"}, {"uuid": "uB", "profile_nickname": "Bob"},
+           {"uuid": "uC", "profile_nickname": "Carol"}]
+
+
+async def test_friend_filter_and_failures(hass, aioclient_mock, caplog):
+    cfg = {"kakao_talk": {**CFG["kakao_talk"], "friends": ["alice", "uC", "Nobody"]}}
+    aioclient_mock.post("https://kauth.kakao.com/oauth/token", json={"access_token": "AT"})
+    aioclient_mock.post("https://kapi.kakao.com/v2/api/talk/memo/default/send", json={"result_code": 0})
+    aioclient_mock.get("https://kapi.kakao.com/v1/api/talk/friends", json={"elements": FRIENDS, "total_count": 3})
+    aioclient_mock.post(
+        "https://kapi.kakao.com/v1/api/talk/friends/message/default/send",
+        json={"successful_receiver_uuids": ["uA"],
+              "failure_info": [{"code": -532, "msg": "daily message limit per sender has been exceeded.",
+                                "receiver_uuids": ["uC"]}]},
+    )
+    assert await async_setup_component(hass, "kakao_talk", cfg)
+    await hass.async_block_till_done()
+    # pretend a login happened so a refresh token exists
+    with open(hass.config.path("kakao.session"), "w") as f:
+        f.write("RT")
+    await hass.services.async_call("kakao_talk", "send_message", {"message": "hi"}, blocking=True)
+
+    sends = [c for c in aioclient_mock.mock_calls if "friends/message" in str(c[1])]
+    assert len(sends) == 1
+    assert json.loads(sends[0][2]["receiver_uuids"]) == ["uA", "uC"]
+    assert "daily message limit" in caplog.text
+    assert "Nobody" in caplog.text.lower() or "nobody" in caplog.text.lower()
+
+    res = await hass.services.async_call("kakao_talk", "list_friends", {}, blocking=True, return_response=True)
+    assert res == {"friends": [{"uuid": "uA", "nickname": "Alice"}, {"uuid": "uB", "nickname": "Bob"},
+                               {"uuid": "uC", "nickname": "Carol"}]}
