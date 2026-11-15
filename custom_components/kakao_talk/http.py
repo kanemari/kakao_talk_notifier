@@ -8,10 +8,12 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import aiohttp
+import voluptuous as vol
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
 from homeassistant.core import ServiceCall, SupportsResponse, callback
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.util.network import is_local
 
@@ -385,7 +387,17 @@ def async_register_http(hass, cfg):
         friends = await config.async_list_friends()
         return {"friends": friends}
 
-    hass.services.async_register(DOMAIN, SERVICE_SEND_MESSAGE, send_message_handler)
+    send_message_schema = vol.Schema(
+        {
+            vol.Required("message"): vol.All(cv.string, vol.Length(min=1)),
+            vol.Optional(ATTR_TITLE): cv.string,
+            vol.Optional(ATTR_URL): cv.string,
+        }
+    )
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_SEND_MESSAGE, send_message_handler, schema=send_message_schema
+    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_LIST_FRIENDS,
