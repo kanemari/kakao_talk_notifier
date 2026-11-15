@@ -6,6 +6,7 @@ CONF_API_KEY = "api_key"
 CONF_BUTTON_TITLE = "button_title"
 CONF_CLIENT_SECRET = "client_secret"
 CONF_FRIENDS = "friends"
+CONF_LINK_URL = "link_url"
 CONF_REDIRECT_URI = "redirect_uri"
 CONF_SEND_TO_FRIENDS = "send_to_friends"
 

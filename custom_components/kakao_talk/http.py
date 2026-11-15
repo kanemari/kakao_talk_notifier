@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import secrets
 import time
+from ipaddress import ip_address
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -11,6 +13,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
 from homeassistant.core import ServiceCall, SupportsResponse, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util.network import is_local
 
 from .const import (
     ATTR_URL,
@@ -18,6 +21,7 @@ from .const import (
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
     CONF_FRIENDS,
+    CONF_LINK_URL,
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
     DOMAIN,
@@ -47,6 +51,17 @@ FRIENDS_CACHE_SECONDS = 3600
 
 DEFAULT_BUTTON_TITLE = "View"
 
+# How long a started login stays valid, in seconds.
+LOGIN_STATE_SECONDS = 600
+
+
+def _is_local_request(request):
+    """True if the request came from the local network (never the internet)."""
+    try:
+        return is_local(ip_address(request.remote))
+    except (TypeError, ValueError):
+        return False
+
 
 def _read_text(path):
     with open(path, "r", encoding="utf-8", errors="ignore") as file:
@@ -71,6 +86,9 @@ class KakaoConfig:
         self._client_secret = config.get(CONF_CLIENT_SECRET)
         self._button_title = config.get(CONF_BUTTON_TITLE) or DEFAULT_BUTTON_TITLE
         self._host = config.get(CONF_REDIRECT_URI)
+        # URL that message buttons link to; its domain must be registered at Kakao.
+        self._link_url = config.get(CONF_LINK_URL) or self._host
+        self._login_states = {}
         self._send_to_friends = config.get(CONF_SEND_TO_FRIENDS)
         # Optional filter: nicknames or uuids to send to. Empty means everyone returned.
         self._friend_filter = [str(f).strip().lower() for f in config.get(CONF_FRIENDS) or []]
@@ -115,6 +133,18 @@ class KakaoConfig:
             base = "{}://{}".format(request.scheme, request.host)
         return base + KAKAO_TALK_API_ENDPOINT
 
+    def new_login_state(self):
+        """Create a single-use token tying the Kakao callback to a login we started."""
+        now = time.monotonic()
+        self._login_states = {s: t for s, t in self._login_states.items() if t > now}
+        state = secrets.token_urlsafe(32)
+        self._login_states[state] = now + LOGIN_STATE_SECONDS
+        return state
+
+    def consume_login_state(self, state):
+        expires = self._login_states.pop(state or "", 0)
+        return expires > time.monotonic()
+
     def authorize_url(self, request):
         scope = "talk_message"
         if self._send_to_friends:
@@ -125,6 +155,7 @@ class KakaoConfig:
                 "redirect_uri": self.redirect_uri(request),
                 "response_type": "code",
                 "scope": scope,
+                "state": self.new_login_state(),
             }
         )
 
@@ -156,6 +187,14 @@ class KakaoConfig:
 
         self._access_token = res["access_token"]
         self._refresh_token = res.get("refresh_token", self._refresh_token)
+        scope = res.get("scope", "")
+        _LOGGER.info("Kakao login complete; granted scopes: %s", scope or "(none reported)")
+        if self._send_to_friends and "friends" not in scope.split():
+            _LOGGER.warning(
+                "send_to_friends is on but Kakao did not grant the 'friends' scope. "
+                "Check that the 'Friends list in Kakao services' consent item is set up "
+                "in the Kakao console, and that the sender is an app member."
+            )
         self._friends = []
         self._friends_fetched = 0.0
         await self.save_refresh_token()
@@ -298,7 +337,7 @@ class KakaoConfig:
             await self._async_send_to_friends(template)
 
     def _link(self):
-        return {"web_url": self._host, "mobile_web_url": self._host}
+        return {"web_url": self._link_url, "mobile_web_url": self._link_url}
 
     async def async_send_text(self, message):
         await self._async_send_template(
@@ -374,6 +413,15 @@ class KakaoTalkView(HomeAssistantView):
         return web.Response(body=content, content_type="text/html", charset="utf-8")
 
     async def get(self, request):
+        # Login must never be possible from the internet: anyone able to complete a
+        # Kakao login here would replace the stored account and receive your messages.
+        if not _is_local_request(request):
+            _LOGGER.warning(
+                "Blocked non-local request to the KakaoTalk login page from %s",
+                request.remote,
+            )
+            return web.Response(status=403, text="Forbidden")
+
         query = request.rel_url.query
 
         if "image" in query:
@@ -400,6 +448,16 @@ class KakaoTalkView(HomeAssistantView):
             )
 
         if "code" in query:
+            if not self.config.consume_login_state(query.get("state")):
+                _LOGGER.warning(
+                    "Ignored Kakao login callback without a valid state. "
+                    "Start the login from the setup page and finish within 10 minutes."
+                )
+                return web.Response(
+                    text="Login not started from this page, or it expired. "
+                    "Open the setup page and try again.",
+                    status=400,
+                )
             res = await self.config.async_get_token(
                 query["code"], self.config.redirect_uri(request)
             )

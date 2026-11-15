@@ -29,7 +29,7 @@ async def test_flow(hass, hass_client_no_auth, aioclient_mock):
     assert (await client.get("/api/kakao_talk?image=kakaotalk-hassio.png")).status == 200
     assert (await client.get("/api/kakao_talk?message=hi")).status == 200  # just the page now
 
-    r = await client.get("/api/kakao_talk?code=CODE")
+    r = await client.get("/api/kakao_talk?code=CODE&state=" + q["state"][0])
     assert r.status == 200
     tok = [c for c in aioclient_mock.mock_calls if "oauth/token" in str(c[1])][0]
 
@@ -80,3 +80,29 @@ async def test_friend_filter_and_failures(hass, aioclient_mock, caplog):
     res = await hass.services.async_call("kakao_talk", "list_friends", {}, blocking=True, return_response=True)
     assert res == {"friends": [{"uuid": "uA", "nickname": "Alice"}, {"uuid": "uB", "nickname": "Bob"},
                                {"uuid": "uC", "nickname": "Carol"}]}
+
+
+async def test_login_page_is_not_reachable_from_internet_or_forgeable(hass, hass_client_no_auth, aioclient_mock):
+    from unittest.mock import patch
+
+    aioclient_mock.post("https://kauth.kakao.com/oauth/token", json={"access_token": "ATTACKER", "refresh_token": "RT-ATTACKER"})
+    assert await async_setup_component(hass, "kakao_talk", CFG)
+    await hass.async_block_till_done()
+    client = await hass_client_no_auth()
+
+    # From a non-local address everything is refused, including starting a login.
+    with patch("custom_components.kakao_talk.http._is_local_request", return_value=False):
+        for path in ("/api/kakao_talk", "/api/kakao_talk?login=1", "/api/kakao_talk?code=X&state=Y",
+                     "/api/kakao_talk?image=kakaotalk-hassio.png"):
+            assert (await client.get(path, allow_redirects=False)).status == 403
+
+    # Even locally, a callback with a missing/forged state does not store a token.
+    for path in ("/api/kakao_talk?code=X", "/api/kakao_talk?code=X&state=forged"):
+        assert (await client.get(path)).status == 400
+    assert not [c for c in aioclient_mock.mock_calls if "oauth/token" in str(c[1])]
+
+    # A state can only be used once.
+    r = await client.get("/api/kakao_talk?login=1", allow_redirects=False)
+    state = parse_qs(urlparse(r.headers["Location"]).query)["state"][0]
+    assert (await client.get(f"/api/kakao_talk?code=X&state={state}")).status == 200
+    assert (await client.get(f"/api/kakao_talk?code=X&state={state}")).status == 400

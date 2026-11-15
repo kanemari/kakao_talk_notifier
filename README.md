@@ -30,7 +30,8 @@ To enable KakaoTalk notifications in your installation, add the following to you
 kakao_talk:
   api_key: YOUR_REST_API_KEY
   client_secret: YOUR_CLIENT_SECRET   # required if Client Secret is enabled in the Kakao console
-  redirect_uri: YOUR_HASSIO_URL       # include http:// or https:// and the port
+  redirect_uri: http://homeassistant.local:8123   # LOCAL address you open in your browser to log in
+  link_url: https://your-registered-domain        # optional; where message buttons link (domain registered at Kakao)
   send_to_friends: False              # True also needs the 'friends' consent item
   button_title: View                  # optional; label of the button in the message
   friends:                            # optional; only send to these friends (nickname or uuid)
@@ -144,3 +145,28 @@ you can still use it with a small group of testers:
 Limits before approval: 30 messages per day for the whole app, and 5 recipients per
 request (the integration batches automatically). Delivery failures, including the daily
 limit, are logged by the integration.
+
+## Security: the login page is local-only
+
+`/api/kakao_talk` has to be reachable without a Home Assistant login (Kakao redirects your
+browser to it), and whoever completes a Kakao login there becomes the account that
+messages are sent as. To prevent anyone on the internet from swapping in their own
+account, the integration:
+
+* refuses every request to the page that does not come from your local network (HTTP 403), and
+* only accepts a Kakao callback for a login you started from the page (a random,
+  single-use `state` that expires after 10 minutes).
+
+So **do the login from a device on your home network**, using a local address as
+`redirect_uri` (for example `http://homeassistant.local:8123` or `http://192.168.1.10:8123`)
+and register `<that address>/api/kakao_talk` as the Redirect URI in the Kakao console.
+Kakao redirects your own browser, so a local address works fine.
+
+If you run Home Assistant behind a reverse proxy, configure `use_x_forwarded_for` and
+`trusted_proxies` under `http:` so Home Assistant sees real client addresses; otherwise it
+rejects proxied requests.
+
+Use `link_url` for the address that message buttons point to if it differs from
+`redirect_uri`. Its domain must be registered under *App > Product Link > Web domain*.
+After a login the integration logs which scopes Kakao granted (look for
+"granted scopes" in the log). With `send_to_friends` on it warns if `friends` is missing.
