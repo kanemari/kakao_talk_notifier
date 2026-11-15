@@ -1,0 +1,67 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "KakaoTalk Notifier",
+        "description": "Enter the settings of your Kakao app. After saving, run the **kakao_talk.login** action (Developer tools > Actions) to log in to Kakao.",
+        "data": {
+          "api_key": "REST API key",
+          "client_secret": "Client secret",
+          "redirect_uri": "Home Assistant address",
+          "link_url": "Button link address",
+          "button_title": "Button label",
+          "send_to_friends": "Also send to friends",
+          "friends": "Friends to send to"
+        },
+        "data_description": {
+          "api_key": "The REST API key of your Kakao app.",
+          "client_secret": "Needed when the Client secret is enabled in the Kakao console (the default).",
+          "redirect_uri": "Local address of Home Assistant, for example http://192.168.1.10:8123, without a path. Register it plus /api/kakao_talk as the Redirect URI at Kakao.",
+          "link_url": "Address the message button opens. Defaults to the Home Assistant address. Its domain must be registered at Kakao.",
+          "button_title": "Label of the button in a message.",
+          "send_to_friends": "Also send messages to Kakao Talk friends. Log in again after turning this on.",
+          "friends": "Nicknames or uuids. Leave empty to send to every friend Kakao returns. Can be overridden per message."
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Enter a full address starting with http:// or https://.",
+      "required": "This field is required."
+    },
+    "abort": {
+      "single_instance_allowed": "KakaoTalk Notifier is already set up.",
+      "already_configured": "KakaoTalk Notifier is already set up in the UI. The configuration.yaml settings were ignored.",
+      "invalid_import": "The kakao_talk settings in configuration.yaml are invalid, so they were not imported. Set it up from the UI instead."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "KakaoTalk Notifier settings",
+        "description": "Saving reloads the integration. Run **kakao_talk.login** again after changing the API key, client secret or turning on friends.",
+        "data": {
+          "api_key": "REST API key",
+          "client_secret": "Client secret",
+          "redirect_uri": "Home Assistant address",
+          "link_url": "Button link address",
+          "button_title": "Button label",
+          "send_to_friends": "Also send to friends",
+          "friends": "Friends to send to"
+        },
+        "data_description": {
+          "friends": "Pick from the friends Kakao returns, or type a nickname or uuid. Leave empty for every friend."
+        }
+      }
+    },
+    "error": {
+      "invalid_url": "Enter a full address starting with http:// or https://.",
+      "required": "This field is required."
+    }
+  },
+  "issues": {
+    "yaml_deprecated": {
+      "title": "KakaoTalk configuration.yaml settings are deprecated",
+      "description": "Your KakaoTalk Notifier settings were imported into **Settings > Devices & services**, which is now the only place they are used. Please remove the `kakao_talk:` block, and the `- platform: kakao_talk` entry under `notify:`, from `configuration.yaml`, then restart. Manual YAML configuration is deprecated and will be removed in a future release. The `notify.kakao_talk` action keeps working without it."
+    }
+  }
+}

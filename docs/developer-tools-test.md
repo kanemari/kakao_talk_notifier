@@ -117,7 +117,7 @@ data:
 
 * `friends`, `send_to_friends` and `send_to_me` are per message. The configured
   `friends:` list is only the default.
-* `friends` needs `send_to_friends: True` in `configuration.yaml` (the login must include
+* `friends` needs *Also send to friends* turned on in the integration settings (the login must include
   the friends permission). An unknown friend name is logged, and if none match the action
   fails with an error.
 * `image` uploads a local JPEG/PNG (max 5 MB) to Kakao; `url` is for images already

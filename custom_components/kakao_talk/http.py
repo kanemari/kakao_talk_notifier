@@ -308,6 +308,10 @@ class KakaoConfig:
                 "'talk_message' are returned (see the README)."
             )
 
+    @property
+    def send_to_friends(self):
+        return bool(self._send_to_friends)
+
     async def async_list_friends(self):
         """Fetch (fresh) and return the friends Kakao makes available to the app."""
         if not await self._async_refresh_access_token():
@@ -469,10 +473,19 @@ class KakaoConfig:
 
 
 @callback
-def async_register_http(hass, cfg):
-    config = KakaoConfig(hass, cfg)
-    hass.http.register_view(KakaoTalkView(config))
+def async_setup_view(hass):
+    """Register the setup page / OAuth callback once. It finds the active entry itself."""
+    hass.http.register_view(KakaoTalkView(hass))
 
+
+@callback
+def async_unregister_services(hass):
+    for service in (SERVICE_SEND_MESSAGE, SERVICE_LIST_FRIENDS, SERVICE_LOGIN):
+        hass.services.async_remove(DOMAIN, service)
+
+
+@callback
+def async_register_services(hass, config):
     async def send_message_handler(call: ServiceCall):
         """Handle the kakao_talk.send_message service."""
         title = call.data.get(ATTR_TITLE) or ""
@@ -563,14 +576,21 @@ class KakaoTalkView(HomeAssistantView):
     name = "api:kakao_talk"
     requires_auth = False
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, hass):
+        self._hass = hass
+
+    @property
+    def config(self):
+        """The KakaoConfig of the loaded config entry, or None."""
+        return self._hass.data.get(DOMAIN, {}).get("config")
 
     async def _page(self):
         content = await self.config.get_setup_page()
         return web.Response(body=content, content_type="text/html", charset="utf-8")
 
     async def get(self, request):
+        if self.config is None:
+            return web.Response(status=503, text="KakaoTalk is not set up.")
         # Defence in depth: refuse anything that visibly comes from the internet.
         if not _is_local_request(self.config.hass, request):
             _LOGGER.warning(
