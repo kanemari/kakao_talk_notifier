@@ -1,9 +1,12 @@
 {
   "domain": "kakao_talk",
   "name": "Kakao Talk",
-  "version": "2024.08.22",
-  "documentation": "https://github.com/clipman/kakao_talk",
-  "requirements": [],
+  "codeowners": ["@nimusis", "@clipman"],
   "dependencies": ["http"],
-  "codeowners": ["@nimusis", "@clipman"]
+  "documentation": "https://github.com/clipman/kakao_talk",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/clipman/kakao_talk/issues",
+  "requirements": [],
+  "version": "2026.11.15"
 }

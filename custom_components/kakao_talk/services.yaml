@@ -1,12 +1,23 @@
 send_message:
-  description: Send a notification.
+  name: Send message
+  description: Send a KakaoTalk notification.
   fields:
     title:
-      description: Optional title for your notification. Will be composed as '%title\n%message for text message'
-      example: 'Your Garage Door Friend'
+      name: Title
+      description: Optional title. Composed as '%title\n\n%message' for text messages.
+      example: "Your Garage Door Friend"
+      selector:
+        text:
     message:
+      name: Message
       description: Message body of the notification.
-      example: The garage door has been open for 10 minutes.
-    image_url:
-      description: Remote path to an image.
-      example: 'http://k.kakaocdn.net/dn/bDgfik/btqwQWk4CRU/P6wNJJiQ3Ko21KNE1TiLw1/kakaolink40_original.png'
+      required: true
+      example: "The garage door has been open for 10 minutes."
+      selector:
+        text:
+    url:
+      name: Image URL
+      description: Remote path to an image. When set, a feed-style message is sent.
+      example: "http://k.kakaocdn.net/dn/bDgfik/btqwQWk4CRU/P6wNJJiQ3Ko21KNE1TiLw1/kakaolink40_original.png"
+      selector:
+        text:

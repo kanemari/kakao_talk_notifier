@@ -1,10 +1,10 @@
-
 DOMAIN = "kakao_talk"
 
 KAKAO_TALK_API_ENDPOINT = "/api/kakao_talk"
 
 CONF_API_KEY = "api_key"
-CONF_REDIRECT_URI ="redirect_uri"
+CONF_CLIENT_SECRET = "client_secret"
+CONF_REDIRECT_URI = "redirect_uri"
 CONF_SEND_TO_FRIENDS = "send_to_friends"
 
 SERVICE_SEND_MESSAGE = "send_message"

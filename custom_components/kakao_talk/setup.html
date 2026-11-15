@@ -77,13 +77,8 @@ button {
 
 </style>
 <script>
-var _api_key ='{_api_key}';
-var _host ='{_host}';
 function kakao_login_click() {
-	//window.location.href = 'https://kauth.kakao.com/oauth/authorize?client_id='+_api_key+'&redirect_uri=http%3A%2F%2F'+_host+'%2Fapi%2Fkakao_talk&response_type=code';
-	window.location.href = 'https://accounts.kakao.com/login?continue=https%3A%2F%2Fkauth.kakao.com%2Foauth%2Fauthorize%3Fclient_id%3D'+
-		_api_key+
-		'%26redirect_uri%3Dhttp%253A%252F%252F'+_host+'%252Fapi%252Fkakao_talk%26response_type%3Dcode';
+	window.location.href = '/api/kakao_talk?login=1';
 }
 
 function getUrlParams() {
@@ -133,7 +128,7 @@ window.onload = function() {
 		<p class="before_login">
 			<div id="redirect_uri" class="before_login">
 <script>
-    document.write("<ul><li>http://"+window.location.host+"/api/kakao_talk</li></ul>");
+    document.write("<ul><li>"+window.location.origin+"/api/kakao_talk</li></ul>");
 </script>
 			</div>
 		</p>

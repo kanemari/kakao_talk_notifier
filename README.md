@@ -21,13 +21,17 @@ HACS
 
 The requirements are:
 * You need the REST API Key for KakaoTalk.
+* In the Kakao Developers console: enable **Kakao Login**, add the Redirect URI below, enable the
+  **KakaoTalk Message (talk_message)** consent item, and register your Home Assistant domain under
+  *Platform > Web* (message links use it). If **Client Secret** is enabled, set `client_secret`.
 
 To enable KakaoTalk notifications in your installation, add the following to your `configuration.yaml` file:
 ```
 kakao_talk:
-  api_key: YOUR_API_KEY
-  redirect_uri: YOUR_HASSIO_URL
-  send_to_friends: True
+  api_key: YOUR_REST_API_KEY
+  client_secret: YOUR_CLIENT_SECRET   # required if Client Secret is enabled in the Kakao console
+  redirect_uri: YOUR_HASSIO_URL       # include http:// or https:// and the port
+  send_to_friends: False              # True also needs the 'friends' consent item
   
 notify:
   - platform: kakao_talk
@@ -69,11 +73,11 @@ To use notifications, please see the [getting started with automation page][hass
 
 ```yaml
 ...
-action:
-  service: notify.kakao_talk
-  data:
-    title: Send a message
-    message: That''s an example that _sends_ a formatted message with a custom inline keyboard.
+actions:
+  - action: notify.kakao_talk
+    data:
+      title: Send a message
+      message: A simple text notification.
 ```
 
 #### CONFIGURATION VARIABLES
@@ -90,14 +94,14 @@ action:
 
 ```yaml
 ...
-action:
-  service: notify.kakao_talk
-  data:
-    title: Send an images
-    message: That''s an example that sends an image.
+actions:
+  - action: notify.kakao_talk
     data:
-      photo:
-        - url: https://i.ibb.co/jkbTKZz/hassio.png
+      title: Send an image
+      message: Example notification with an image.
+      data:
+        photo:
+          - url: https://i.ibb.co/jkbTKZz/hassio.png
 ```
 
 #### CONFIGURATION VARIABLES
