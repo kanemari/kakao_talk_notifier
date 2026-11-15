@@ -113,36 +113,29 @@ window.onload = function() {
 <article id="post-14134" class="post-14134 post type-post status-publish format-standard hentry category-other tag-kakaotalk tag-share-button">
 	<h1 class="entry-title">KakaoTalk Notifier for Home Assistant</h1>
 	<div class="post-info">
-		<ul>
-			<li><span class="icon-calendar"></span> Norbember 17, 2019</li>
-			<li><span class="icon-user"></span> <a href="#" title="Created by 마이토이" rel="author">마이토이</a></li>
-		</ul>
+		<p>Originally by clipman, updated for current Home Assistant and Kakao APIs.</p>
 	</div>
 	<div style="width:100%; padding: 0 70px;">
-		<button id="kakao_login" onclick="kakao_login_click();">카카오톡 로그인</button>
+		<button id="kakao_login" onclick="kakao_login_click();">Log in with KakaoTalk</button>
 	</div>
 	<div class="post-entry">
 		<p style="color:#2d1719" class="before_login">
-		카카오톡 로그인 전에 하기의 URI를 카카오톡 <b>로그인 Redircet URI</b>에 입력해 주세요.<br>
+		Before logging in, register this URI as a <b>Redirect URI</b> in the Kakao Developers console:
 		</p>
-		<p class="before_login">
-			<div id="redirect_uri" class="before_login">
+		<div id="redirect_uri" class="before_login">
 <script>
     document.write("<ul><li>"+window.location.origin+"/api/kakao_talk</li></ul>");
 </script>
-			</div>
-		</p>
-		<p class="before_login"><br>
-		<a href="https://developers.kakao.com/">https://developers.kakao.com/</a> 에 접속하면, <i>내어플리케이션 - 설정 - 사용자 관리</i>에 있습니다.<br>
-		아래와 같은 입력창을 찾아서 입력하시면 됩니다.
-		</p>
+		</div>
 		<p class="before_login">
-			<image src="https://i.ibb.co/XVvRW5R/Cap-2019-11-17-03-12-53-892.png"><br>
+		Open <a href="https://developers.kakao.com/">https://developers.kakao.com/</a>, select your app, then go to
+		<i>App &gt; Platform Key &gt; REST API key &gt; Redirect URI</i>.<br>
+		This URI must match the <code>redirect_uri</code> in your configuration.yaml (plus <code>/api/kakao_talk</code>).
 		</p>
 		<p class="after_login">
-			<b>카카오톡 로그인을 완료하였습니다.</b><br><br>
-			메세지를 추가로 받고자 하는 사람이 있다면, 위의 '<b>카카오톡 로그인</b>'버튼을 눌러 추가로 로그인 하시기 바랍니다.<br>
-			추가 로그인을 하신 경우, 맨 마지막에는 주 계정으로 다시한번 로그인 하셔야 합니다.
+			<b>KakaoTalk login complete.</b><br><br>
+			Messages are sent to the account you just logged in with.
+			To switch accounts, log in again with the other account.
 		</p>
 		<p>
 			<img loading="lazy" 

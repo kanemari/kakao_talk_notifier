@@ -9,6 +9,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import (
     DOMAIN,
     CONF_API_KEY,
+    CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
@@ -23,6 +24,7 @@ KAKAO_TALK_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_API_KEY): cv.string,
         vol.Optional(CONF_CLIENT_SECRET): cv.string,
+        vol.Optional(CONF_BUTTON_TITLE, default="View"): cv.string,
         vol.Required(CONF_REDIRECT_URI): cv.string,
         vol.Optional(CONF_SEND_TO_FRIENDS, default=DEFAULT_SEND_TO_FRIENDS): cv.boolean,
     },

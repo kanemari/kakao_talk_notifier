@@ -32,6 +32,7 @@ kakao_talk:
   client_secret: YOUR_CLIENT_SECRET   # required if Client Secret is enabled in the Kakao console
   redirect_uri: YOUR_HASSIO_URL       # include http:// or https:// and the port
   send_to_friends: False              # True also needs the 'friends' consent item
+  button_title: View                  # optional; label of the button in the message
   
 notify:
   - platform: kakao_talk
@@ -63,7 +64,7 @@ https://developers.kakao.com/
 <br><br>
 ![Kakao_Login_Screen](https://user-images.githubusercontent.com/11463289/69050463-73cc2000-0a45-11ea-8445-734e60556bd1.png)
 
-Login KakaoTalk service by clicking '카카오톡 로그인' button.<br>
+Log in to the KakaoTalk service by clicking the "Log in with KakaoTalk" button.<br>
 
 ## Configuration
 

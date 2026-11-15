@@ -1,6 +1,6 @@
 {
   "domain": "kakao_talk",
-  "name": "Kakao Talk",
+  "name": "KakaoTalk Notifier",
   "codeowners": ["@kanemari", "@nimusis", "@clipman"],
   "dependencies": ["http"],
   "documentation": "https://github.com/kanemari/kakao_talk_notifier",

@@ -3,7 +3,7 @@ from urllib.parse import parse_qs, urlparse
 from homeassistant.setup import async_setup_component
 
 CFG = {"kakao_talk": {"api_key": "KEY", "client_secret": "SEC",
-       "redirect_uri": "https://ha.example.com:8123", "send_to_friends": True},
+       "redirect_uri": "https://ha.example.com:8123", "send_to_friends": True, "button_title": "Open"},
        "notify": [{"platform": "kakao_talk", "name": "kakao_talk"}]}
 
 async def test_flow(hass, hass_client_no_auth, aioclient_mock):
@@ -41,6 +41,7 @@ async def test_flow(hass, hass_client_no_auth, aioclient_mock):
     await hass.services.async_call("notify", "kakao_talk", {"title": "T", "message": "a&b%c+d"}, blocking=True)
     sends = [c for c in aioclient_mock.mock_calls if "send" in str(c[1])]
     assert len(sends) == 3  # me + 2 friend chunks (5+2)
+    assert json.loads(sends[0][2]["template_object"])["button_title"] == "Open"
     assert json.loads(sends[0][2]["template_object"])["text"] == "T\n\na&b%c+d"
     assert open(hass.config.path("kakao.session")).read() == "RT2"
 

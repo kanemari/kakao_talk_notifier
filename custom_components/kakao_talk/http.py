@@ -14,6 +14,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .const import (
     ATTR_URL,
     CONF_API_KEY,
+    CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
@@ -39,7 +40,7 @@ FRIENDS_PAGE_SIZE = 100
 # Kakao limits the number of receivers per friends-message request.
 FRIENDS_SEND_CHUNK = 5
 
-BUTTON_TITLE = "바로 확인"
+DEFAULT_BUTTON_TITLE = "View"
 
 
 def _read_text(path):
@@ -63,6 +64,7 @@ class KakaoConfig:
         self.hass = hass
         self._api_key = config.get(CONF_API_KEY)
         self._client_secret = config.get(CONF_CLIENT_SECRET)
+        self._button_title = config.get(CONF_BUTTON_TITLE) or DEFAULT_BUTTON_TITLE
         self._host = config.get(CONF_REDIRECT_URI)
         self._send_to_friends = config.get(CONF_SEND_TO_FRIENDS)
         self._friends = []
@@ -242,7 +244,7 @@ class KakaoConfig:
                 "object_type": "text",
                 "text": message,
                 "link": self._link(),
-                "button_title": BUTTON_TITLE,
+                "button_title": self._button_title,
             }
         )
 
@@ -257,7 +259,7 @@ class KakaoConfig:
                     "link": self._link(),
                 },
                 "social": {},
-                "button_title": BUTTON_TITLE,
+                "button_title": self._button_title,
             }
         )
 
