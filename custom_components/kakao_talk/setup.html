@@ -1,157 +1,96 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KakaoTalk Notifier for Home Assistant</title>
 <style>
 body {
-	position: relative;
 	background: #f7f7f7;
 	margin: 0;
-	padding: 30px;
-	font-family: "Montserrat",helvetica,arial,sans-serif;
-	font-size: 14px;
-	font-weight: 300;
-	color: #66625b;
-	text-align: center;
+	padding: 30px 16px;
+	font-family: helvetica, arial, sans-serif;
+	font-size: 16px;
+	line-height: 1.5;
+	color: #3e3f3f;
 }
 article {
 	background: #fff;
 	border: 1px solid #e2e5e8;
 	border-radius: 8px;
-	padding: 20px 0;
-	margin-bottom: 40px;
-	box-shadow: 0 1px 20px rgba(0,0,0,.25);
+	box-shadow: 0 1px 20px rgba(0, 0, 0, .25);
 	max-width: 880px;
-	text-align: left;
+	margin: 0 auto;
+	overflow: hidden;
 }
-article h1 a,
-article h2 a {
+.content {
+	padding: 20px 40px;
+}
+h1 {
+	font-size: 2rem;
+	line-height: 1.2;
 	color: #2b2b1b;
+	margin: 0 0 4px;
 }
-article h1.entry-title {
-  padding: 0 60px;
-  letter-spacing: -1px;
+.credit {
+	color: #66625b;
+	font-size: .9em;
+	margin-top: 0;
 }
-article h1 {
-    font-size: 2.5rem;
-    margin-bottom: 15px;
+code {
+	background: #f0f0f0;
+	border-radius: 3px;
+	padding: 1px 4px;
+	overflow-wrap: anywhere;
 }
-.post-info {
-    padding: 0 60px;
-    font-weight: 300;
-    font-size: 1em;
+.banner {
+	display: block;
+	width: 100%;
 }
-.post-entry {
-    padding: 0 60px;
-    font-weight: 400;
-    font-size: 1.2em;
-    line-height: 1.5em;
-    color: #3E3F3F;
-}
-.size-full, .pic-full {
-    margin-top: .5em;
-    margin-bottom: .5em;
-    margin-left: -60px;
-    width: calc(100% + 120px);
-}
-p {
-    display: block;
-    margin-block-start: 1em;
-    margin-block-end: 1em;
-    margin-inline-start: 0px;
-    margin-inline-end: 0px;
-}
-
-button {
-    width:160px;
-    background-color: #ffde03;
-    border: none;
-    color: #2d1719;
-    padding: 15px 0;
-    text-align: center;
-    text-decoration: none;
-    display: inline-block;
-    font-size: 15px;
-    font-weight: bold;
-    margin: 4px;
-    cursor: pointer;
-    border-radius:10px 0 10px 0;
-}
-
 </style>
-<script>
-function kakao_login_click() {
-	window.location.href = '/api/kakao_talk?login=1';
-}
-
-function getUrlParams() {
-    var params = {};
-    window.location.search.replace(/[?&]+([^=&]+)=([^&]*)/gi, function(str, key, value) { params[key] = value; });
-    return params;
-}
-
- function visibleClass(name, value) {
-	var todayElements = document.getElementsByClassName(name), i;
-	for (i = 0; i < todayElements.length; i += 1) {
-	todayElements[i].style.display = value;
-	};
-};
-
-window.onload = function() {
-	oParam = getUrlParams();
-	
-	console.log(oParam.code);
-	if (oParam.code==undefined) {
-		visibleClass('before_login','visible');
-		visibleClass('after_login','none');
-	} 
-	else {
-		visibleClass('before_login','none');
-		visibleClass('after_login','visible');
-	}
-}
-</script>
+</head>
 <body>
-<div style="display: inline-block; width:100%">
-<article id="post-14134" class="post-14134 post type-post status-publish format-standard hentry category-other tag-kakaotalk tag-share-button">
-	<h1 class="entry-title">KakaoTalk Notifier for Home Assistant</h1>
-	<div class="post-info">
-		<p>Originally by clipman, updated for current Home Assistant and Kakao APIs.</p>
-	</div>
-	<div style="width:100%; padding: 0 70px;">
-		<button id="kakao_login" onclick="kakao_login_click();">Log in with KakaoTalk</button>
-	</div>
-	<div class="post-entry">
-		<p style="color:#2d1719" class="before_login">
-		Before logging in, register this URI as a <b>Redirect URI</b> in the Kakao Developers console:
-		</p>
-		<div id="redirect_uri" class="before_login">
-<script>
-    document.write("<ul><li>"+window.location.origin+"/api/kakao_talk</li></ul>");
-</script>
+<article>
+	<div class="content">
+		<h1>KakaoTalk Notifier for Home Assistant</h1>
+		<p class="credit">Originally by clipman, updated for current Home Assistant and Kakao APIs.</p>
+
+		<div id="before_login">
+			<p>
+			Before logging in, register a <b>Redirect URI</b> in the Kakao Developers console.
+			If you opened this page at the address set as <code>redirect_uri</code> in your configuration.yaml, it is:
+			</p>
+			<ul><li><code id="redirect_uri"></code></li></ul>
+			<p>
+			Open <a href="https://developers.kakao.com/">https://developers.kakao.com/</a>, select your app, then go to
+			<i>App &gt; Platform Key &gt; REST API key &gt; Redirect URI</i>.<br>
+			The registered URI must be exactly your <code>redirect_uri</code> followed by <code>/api/kakao_talk</code>.
+			</p>
+			<p>
+			<b>To log in:</b> in Home Assistant, go to <i>Developer tools &gt; Actions</i> and run
+			<code>kakao_talk.login</code> as an administrator. A notification appears with a single-use
+			login link that expires in 10 minutes. For security, a login cannot be started from this page.
+			</p>
 		</div>
-		<p class="before_login">
-		Open <a href="https://developers.kakao.com/">https://developers.kakao.com/</a>, select your app, then go to
-		<i>App &gt; Platform Key &gt; REST API key &gt; Redirect URI</i>.<br>
-		This URI must match the <code>redirect_uri</code> in your configuration.yaml (plus <code>/api/kakao_talk</code>).
-		</p>
-		<p class="after_login">
-			<b>KakaoTalk login complete.</b><br><br>
+
+		<div id="after_login" hidden>
+			<p>
+			<b>KakaoTalk login complete.</b>
+			</p>
+			<p>
 			Messages are sent to the account you just logged in with.
-			To switch accounts, log in again with the other account.
-		</p>
-		<p>
-			<img loading="lazy" 
-				src2="https://i.ibb.co/XLjwWkY/kakaotalk-hassio.png"
-				src="/api/kakao_talk?image=kakaotalk-hassio.png"
-				alt="kakaotalk_hassio" width="100%" 
-				class="aligncenter size-full wp-image-14136 lazyloaded" 
-				data-lazy-srcset="/api/kakao_talk?image=kakaotalk-hassio.png 1800w, /api/kakao_talk?image=kakaotalk-hassio.png 300w, /api/kakao_talk?image=kakaotalk-hassio.png 768w, /api/kakao_talk?image=kakaotalk-hassio.png 1024w" 
-				data-lazy-sizes="(max-width: 1800px) 100vw, 1800px" 
-				data-lazy-src="/api/kakao_talk?image=kakaotalk-hassio.png" 
-				sizes="(max-width: 1800px) 100vw, 1800px" 
-				srcset="/api/kakao_talk?image=kakaotalk-hassio.png 1800w, /api/kakao_talk?image=kakaotalk-hassio.png 300w, /api/kakao_talk?image=kakaotalk-hassio.png 768w, /api/kakao_talk?image=kakaotalk-hassio.png 1024w" 
-				data-was-processed="true">
-		</p>
+			To switch accounts, run the <code>kakao_talk.login</code> action again and log in with the other account.
+			</p>
+		</div>
 	</div>
+	<img class="banner" src="/api/kakao_talk?image=kakaotalk-hassio.png" alt="KakaoTalk and Home Assistant">
 </article>
-</div>
+<script>
+document.getElementById('redirect_uri').textContent = window.location.origin + '/api/kakao_talk';
+if (new URLSearchParams(window.location.search).has('done')) {
+	document.getElementById('before_login').hidden = true;
+	document.getElementById('after_login').hidden = false;
+}
+</script>
 </body>
 </html>

@@ -12,6 +12,7 @@ CONF_SEND_TO_FRIENDS = "send_to_friends"
 
 SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_LIST_FRIENDS = "list_friends"
+SERVICE_LOGIN = "login"
 
 SESSION_FILE = "kakao.session"
 

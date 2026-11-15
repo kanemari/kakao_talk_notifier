@@ -10,11 +10,14 @@ from urllib.parse import urlencode
 import aiohttp
 import voluptuous as vol
 from aiohttp import web
+from homeassistant.components import persistent_notification
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
 from homeassistant.core import ServiceCall, SupportsResponse, callback
+from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.network import is_cloud_connection
 from homeassistant.util.network import is_local
 
 from .const import (
@@ -29,6 +32,7 @@ from .const import (
     DOMAIN,
     KAKAO_TALK_API_ENDPOINT,
     SERVICE_LIST_FRIENDS,
+    SERVICE_LOGIN,
     SERVICE_SEND_MESSAGE,
     SESSION_FILE,
 )
@@ -55,14 +59,35 @@ DEFAULT_BUTTON_TITLE = "View"
 
 # How long a started login stays valid, in seconds.
 LOGIN_STATE_SECONDS = 600
+# Only this many started logins are remembered at once.
+MAX_LOGIN_STATES = 5
+LOGIN_NOTIFICATION_ID = "kakao_talk_login"
 
 
-def _is_local_request(request):
-    """True if the request came from the local network (never the internet)."""
+def _is_local_request(hass, request):
+    """True if the request appears to come from the local network.
+
+    This is defence in depth only: behind a reverse proxy that hides the client
+    address every request looks local. The real protection is that a login can
+    only be started by an authenticated Home Assistant admin (see the login action).
+    """
+    if is_cloud_connection(hass):
+        return False
     try:
         return is_local(ip_address(request.remote))
     except (TypeError, ValueError):
         return False
+
+
+def _write_private(path, content):
+    """Write a file readable only by the Home Assistant user."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as file:
+        file.write(content)
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
 
 
 def _read_text(path):
@@ -74,11 +99,6 @@ def _read_session(path):
     if not os.path.exists(path) or os.stat(path).st_size == 0:
         return None
     return _read_text(path).strip() or None
-
-
-def _write_text(path, content):
-    with open(path, "w", encoding="utf-8") as file:
-        file.write(content)
 
 
 class KakaoConfig:
@@ -109,13 +129,13 @@ class KakaoConfig:
         if token:
             self._refresh_token = token
         else:
-            _LOGGER.warning("Please login on Kakaotalk!! (open /api/kakao_talk)")
+            _LOGGER.warning("Not logged in to KakaoTalk yet; run the kakao_talk.login action")
 
     async def save_refresh_token(self):
         path = self.hass.config.path(SESSION_FILE)
         try:
             await self.hass.async_add_executor_job(
-                _write_text, path, self._refresh_token
+                _write_private, path, self._refresh_token
             )
         except OSError as exception:
             _LOGGER.error("Error saving refresh token: %s", exception)
@@ -128,17 +148,22 @@ class KakaoConfig:
             return ""
 
     # ------------------------------------------------------------------ OAuth
-    def redirect_uri(self, request):
-        """The OAuth redirect URI; must match the one registered at Kakao."""
-        base = (self._host or "").rstrip("/")
-        if not base.startswith(("http://", "https://")):
-            base = "{}://{}".format(request.scheme, request.host)
-        return base + KAKAO_TALK_API_ENDPOINT
+    def redirect_uri(self):
+        """The OAuth redirect URI; must match the one registered at Kakao.
+
+        Built only from configuration, never from the incoming request, so a
+        forged Host header cannot change where Kakao sends the login.
+        """
+        return self._host.rstrip("/") + KAKAO_TALK_API_ENDPOINT
 
     def new_login_state(self):
         """Create a single-use token tying the Kakao callback to a login we started."""
         now = time.monotonic()
-        self._login_states = {s: t for s, t in self._login_states.items() if t > now}
+        live = sorted(
+            ((t, s) for s, t in self._login_states.items() if t > now), reverse=True
+        )
+        # Keep only the newest few so the store cannot grow without bound.
+        self._login_states = {s: t for t, s in live[: MAX_LOGIN_STATES - 1]}
         state = secrets.token_urlsafe(32)
         self._login_states[state] = now + LOGIN_STATE_SECONDS
         return state
@@ -147,14 +172,15 @@ class KakaoConfig:
         expires = self._login_states.pop(state or "", 0)
         return expires > time.monotonic()
 
-    def authorize_url(self, request):
+    def authorize_url(self):
+        """Kakao login URL for a new login. Only hand this to an authenticated admin."""
         scope = "talk_message"
         if self._send_to_friends:
             scope += ",friends"
         return OAUTH_AUTHORIZE_URL + "?" + urlencode(
             {
                 "client_id": self._api_key,
-                "redirect_uri": self.redirect_uri(request),
+                "redirect_uri": self.redirect_uri(),
                 "response_type": "code",
                 "scope": scope,
                 "state": self.new_login_state(),
@@ -177,11 +203,11 @@ class KakaoConfig:
         payload.update(extra)
         return payload
 
-    async def async_get_token(self, code, redirect_uri):
+    async def async_get_token(self, code):
         res = await self._post_form(
             OAUTH_TOKEN_URL,
             self._token_payload(
-                "authorization_code", redirect_uri=redirect_uri, code=code
+                "authorization_code", redirect_uri=self.redirect_uri(), code=code
             ),
         )
         if not res or "access_token" not in res:
@@ -195,7 +221,7 @@ class KakaoConfig:
             _LOGGER.warning(
                 "send_to_friends is on but Kakao did not grant the 'friends' scope. "
                 "Check that the 'Friends list in Kakao services' consent item is set up "
-                "in the Kakao console, and that the sender is an app member."
+                "in the Kakao console, then run the kakao_talk.login action again."
             )
         self._friends = []
         self._friends_fetched = 0.0
@@ -205,7 +231,7 @@ class KakaoConfig:
     async def _async_refresh_access_token(self):
         """Refresh the access token. Returns True on success."""
         if not self._refresh_token:
-            _LOGGER.error("Not logged in to KakaoTalk; open /api/kakao_talk to login")
+            _LOGGER.error("Not logged in to KakaoTalk; run the kakao_talk.login action")
             return False
         res = await self._post_form(
             OAUTH_TOKEN_URL,
@@ -213,7 +239,7 @@ class KakaoConfig:
         )
         if not res or "access_token" not in res:
             _LOGGER.error(
-                "Kakao token refresh failed (login again at /api/kakao_talk): %s", res
+                "Kakao token refresh failed (run the kakao_talk.login action again): %s", res
             )
             return False
         self._access_token = res["access_token"]
@@ -387,6 +413,30 @@ def async_register_http(hass, cfg):
         friends = await config.async_list_friends()
         return {"friends": friends}
 
+    async def login_handler(call: ServiceCall):
+        """Start a Kakao login. Only a Home Assistant admin may do this.
+
+        Whoever completes a Kakao login becomes the account messages are sent as,
+        so the login link (which carries a single-use state) is only ever given
+        to an authenticated admin, never served from the unauthenticated page.
+        """
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None or not user.is_admin:
+                raise Unauthorized(context=call.context)
+        url = config.authorize_url()
+        persistent_notification.async_create(
+            hass,
+            f"[Log in with KakaoTalk]({url})\n\n"
+            "Open this link on a device on your home network. "
+            "It can be used once and expires in 10 minutes.",
+            title="KakaoTalk login",
+            notification_id=LOGIN_NOTIFICATION_ID,
+        )
+        if call.return_response:
+            return {"url": url}
+        return None
+
     send_message_schema = vol.Schema(
         {
             vol.Required("message"): vol.All(cv.string, vol.Length(min=1)),
@@ -404,13 +454,21 @@ def async_register_http(hass, cfg):
         list_friends_handler,
         supports_response=SupportsResponse.ONLY,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LOGIN,
+        login_handler,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
 
 
 class KakaoTalkView(HomeAssistantView):
-    """Login/setup page and OAuth callback.
+    """Setup page and OAuth callback.
 
-    Authentication is disabled because Kakao redirects the browser here.
-    The view never sends messages; it only handles login.
+    Authentication is disabled because Kakao redirects the browser here. The view
+    cannot start a login and never sends messages: it only completes a login that
+    an admin started with the kakao_talk.login action (checked via `state`).
     """
 
     url = KAKAO_TALK_API_ENDPOINT
@@ -425,11 +483,10 @@ class KakaoTalkView(HomeAssistantView):
         return web.Response(body=content, content_type="text/html", charset="utf-8")
 
     async def get(self, request):
-        # Login must never be possible from the internet: anyone able to complete a
-        # Kakao login here would replace the stored account and receive your messages.
-        if not _is_local_request(request):
+        # Defence in depth: refuse anything that visibly comes from the internet.
+        if not _is_local_request(self.config.hass, request):
             _LOGGER.warning(
-                "Blocked non-local request to the KakaoTalk login page from %s",
+                "Blocked non-local request to the KakaoTalk setup page from %s",
                 request.remote,
             )
             return web.Response(status=403, text="Forbidden")
@@ -442,9 +499,6 @@ class KakaoTalkView(HomeAssistantView):
             if not path.is_file():
                 return web.Response(status=404)
             return web.FileResponse(path)
-
-        if "login" in query:
-            raise web.HTTPFound(self.config.authorize_url(request))
 
         if "error" in query:
             _LOGGER.warning(
@@ -462,20 +516,23 @@ class KakaoTalkView(HomeAssistantView):
         if "code" in query:
             if not self.config.consume_login_state(query.get("state")):
                 _LOGGER.warning(
-                    "Ignored Kakao login callback without a valid state. "
-                    "Start the login from the setup page and finish within 10 minutes."
+                    "Ignored Kakao login callback without a valid state. Start the "
+                    "login with the kakao_talk.login action and finish within 10 minutes."
                 )
                 return web.Response(
-                    text="Login not started from this page, or it expired. "
-                    "Open the setup page and try again.",
+                    text="This login was not started from Home Assistant, or it expired. "
+                    "Run the kakao_talk.login action and try again.",
                     status=400,
                 )
-            res = await self.config.async_get_token(
-                query["code"], self.config.redirect_uri(request)
-            )
+            res = await self.config.async_get_token(query["code"])
             if "access_token" not in res:
                 error = res.get("error_description") or str(res)
                 _LOGGER.warning("Kakao login failed: %s", error)
                 return web.Response(text=error, status=200)
+            persistent_notification.async_dismiss(
+                self.config.hass, LOGIN_NOTIFICATION_ID
+            )
+            # Drop the one-time code and state from the address bar and history.
+            raise web.HTTPFound(KAKAO_TALK_API_ENDPOINT + "?done=1")
 
         return await self._page()

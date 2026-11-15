@@ -1,10 +1,11 @@
 send_message:
   name: Send message
-  description: Send a KakaoTalk notification.
+  description: >-
+    Send a KakaoTalk message to yourself, and to friends if send_to_friends is on.
   fields:
     title:
       name: Title
-      description: Optional title. Composed as '%title\n\n%message' for text messages.
+      description: Optional title. Shown above the message, separated by a blank line.
       example: "Your Garage Door Friend"
       selector:
         text:
@@ -17,7 +18,9 @@ send_message:
         text:
     url:
       name: Image URL
-      description: Remote path to an image. When set, a feed-style message is sent.
+      description: >-
+        Address of an image, which should be reachable from the internet. When set,
+        the message is sent as a card with the image, the title and the message.
       example: "http://k.kakaocdn.net/dn/bDgfik/btqwQWk4CRU/P6wNJJiQ3Ko21KNE1TiLw1/kakaolink40_original.png"
       selector:
         text:
@@ -26,4 +29,12 @@ list_friends:
   name: List friends
   description: >-
     Return the Kakao Talk friends (nickname and uuid) that Kakao makes available to
-    this app. Use it to find the names or uuids to put in the `friends` setting.
+    this app, and refresh the cached list. Use it to find the names or uuids to put
+    in the `friends` setting.
+
+login:
+  name: Log in to KakaoTalk
+  description: >-
+    Start a KakaoTalk login (administrators only). Creates a notification with a
+    single-use login link that expires in 10 minutes. Open the link on a device on
+    your home network.
