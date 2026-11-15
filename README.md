@@ -7,6 +7,9 @@
 A [Home Assistant][hass] custom integration that sends notifications to KakaoTalk:
 to your own "My Chatroom", and optionally to Kakao Talk friends.
 
+Unofficial project, not affiliated with or endorsed by Kakao Corp. KakaoTalk and Kakao are
+trademarks of their owners.
+
 Good to know before you start:
 
 * Messages to yourself arrive in "My Chatroom" **silently**: no push notification and no
