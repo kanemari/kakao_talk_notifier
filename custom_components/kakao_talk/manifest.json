@@ -3,6 +3,7 @@
   "name": "KakaoTalk Notifier",
   "codeowners": ["@kanemari", "@nimusis", "@clipman"],
   "dependencies": ["http", "persistent_notification"],
+  "after_dependencies": ["media_source"],
   "documentation": "https://github.com/kanemari/kakao_talk_notifier",
   "integration_type": "service",
   "iot_class": "cloud_push",

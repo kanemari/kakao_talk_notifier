@@ -7,7 +7,7 @@ from homeassistant.components.notify import (
     BaseNotificationService,
 )
 
-from .const import ATTR_PHOTO, DOMAIN
+from .const import ATTR_FRIENDS, ATTR_PHOTO, ATTR_SEND_TO_FRIENDS, ATTR_SEND_TO_ME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +30,10 @@ class KakaoTalkNotificationService(BaseNotificationService):
             service_data[ATTR_MESSAGE] = message
 
         data = kwargs.get(ATTR_DATA)
+        if data:
+            for key in (ATTR_FRIENDS, ATTR_SEND_TO_FRIENDS, ATTR_SEND_TO_ME):
+                if key in data:
+                    service_data[key] = data[key]
         if data is not None and ATTR_PHOTO in data:
             photos = data[ATTR_PHOTO]
             photos = photos if isinstance(photos, list) else [photos]

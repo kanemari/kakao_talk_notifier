@@ -18,3 +18,7 @@ SESSION_FILE = "kakao.session"
 
 ATTR_PHOTO = "photo"
 ATTR_URL = "url"
+ATTR_IMAGE = "image"
+ATTR_FRIENDS = "friends"
+ATTR_SEND_TO_FRIENDS = "send_to_friends"
+ATTR_SEND_TO_ME = "send_to_me"

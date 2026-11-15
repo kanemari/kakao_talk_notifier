@@ -124,12 +124,49 @@ actions:
 
 ![image_sample](https://user-images.githubusercontent.com/11463289/69052464-6e250900-0a4a-11ea-8c5c-844caa8d9983.png)
 
+### Message with an image from your media
+
+Instead of a public URL you can pick an image from Home Assistant's media (for example
+`/media`). It is uploaded to Kakao, so it need not be reachable from the internet.
+JPEG or PNG, up to 5 MB.
+
+```yaml
+actions:
+  - action: kakao_talk.send_message
+    data:
+      message: Someone is at the door.
+      image:
+        media_content_id: media-source://media_source/local/doorbell.jpg
+        media_content_type: image/jpeg
+```
+
+### Choosing recipients per message
+
+`kakao_talk.send_message` (and `data:` of `notify.kakao_talk`) accept:
+
+* **friends**: nicknames or uuids to message, instead of the `friends:` list in the
+  configuration. Run `kakao_talk.list_friends` to see the names and uuids.
+* **send_to_friends**: override the configured setting for this message.
+* **send_to_me**: set `false` to skip your own copy and message only the friends.
+
+```yaml
+actions:
+  - action: kakao_talk.send_message
+    data:
+      message: Dinner is ready.
+      friends: ["Alice"]
+      send_to_me: false
+```
+
+These need `send_to_friends: True` in the configuration (so the login includes the
+friends permission); see [Sending to friends](#sending-to-friends).
+
 ### Actions
 
 | Action | What it does |
 |---|---|
 | `notify.kakao_talk` | Sends a notification (see the examples above). |
-| `kakao_talk.send_message` | The same, called directly, with the fields `message` (required), `title` and `url`. |
+| `kakao_talk.send_message` | The same, called directly, with the fields `message` (required), `title`, `url`, `image`, `friends`, `send_to_friends` and `send_to_me`. |
 | `kakao_talk.login` | Starts a Kakao login. Administrators only. |
 | `kakao_talk.list_friends` | Returns the nicknames and uuids of the friends Kakao makes available to your app. |
 
