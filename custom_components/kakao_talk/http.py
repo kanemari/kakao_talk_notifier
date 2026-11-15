@@ -309,7 +309,7 @@ class KakaoTalkView(HomeAssistantView):
             return web.FileResponse(path)
 
         if "login" in query:
-            return web.HTTPFound(self.config.authorize_url(request))
+            raise web.HTTPFound(self.config.authorize_url(request))
 
         if "error" in query:
             _LOGGER.warning(
