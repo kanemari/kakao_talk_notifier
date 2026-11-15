@@ -1,4 +1,8 @@
-# KakaoTalk Notifier
+<p align="center">
+  <img src="docs/icon.svg" width="96" alt="KakaoTalk Notifier icon">
+</p>
+
+<h1 align="center">KakaoTalk Notifier</h1>
 
 A [Home Assistant][hass] custom integration that sends notifications to KakaoTalk:
 to your own "My Chatroom", and optionally to Kakao Talk friends.
