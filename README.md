@@ -11,7 +11,7 @@ HACS
 * Custom repositories
 ```
   Repository:
-    https://github.com/clipman/kakao_talk
+    https://github.com/kanemari/kakao_talk_notifier
   Category:
     Integration
 ```
