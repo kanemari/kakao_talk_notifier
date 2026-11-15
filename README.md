@@ -3,13 +3,6 @@
 A [Home Assistant][hass] custom integration that sends notifications to KakaoTalk:
 to your own "My Chatroom", and optionally to Kakao Talk friends.
 
-Based on the original `kakao_talk` integration by clipman and musk95, updated for
-current Home Assistant and Kakao APIs.
-
-<div>
-  <img width="600" src="https://user-images.githubusercontent.com/11463289/69047831-69a72300-0a3f-11ea-9382-94141f96a88e.png"/>
-</div>
-
 Good to know before you start:
 
 * Messages to yourself arrive in "My Chatroom" **silently**: no push notification and no
@@ -125,15 +118,13 @@ actions:
       message: Someone is at the door.
       data:
         photo:
-          - url: https://i.ibb.co/jkbTKZz/hassio.png
+          - url: https://example.com/doorbell.jpg
 ```
 
 * **url** (required for an image): the address of the image. Use one that is reachable
   from the internet, since the image is loaded by Kakao and by the recipient's phone,
   not by Home Assistant. The message is then sent as a card with the image, the title
   and the message. One message is sent per image.
-
-![image_sample](https://user-images.githubusercontent.com/11463289/69052464-6e250900-0a4a-11ea-8c5c-844caa8d9983.png)
 
 ### Message with an image from your media
 

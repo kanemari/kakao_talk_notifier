@@ -3,7 +3,7 @@
   "name": "KakaoTalk Notifier",
   "config_flow": true,
   "single_config_entry": true,
-  "codeowners": ["@kanemari", "@nimusis", "@clipman"],
+  "codeowners": ["@kanemari"],
   "dependencies": ["http", "persistent_notification"],
   "after_dependencies": ["media_source"],
   "documentation": "https://github.com/kanemari/kakao_talk_notifier",
