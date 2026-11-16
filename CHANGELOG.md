@@ -27,6 +27,11 @@
   carry a strict Content-Security-Policy. The thank-you page also removes Kakao's one-time code
   from the browser's address bar.
 
+### Changed
+
+* **Settings form**: every field now has a one-line help text of similar length, in both the setup and
+  **Configure** forms, so the fields are evenly spaced. Longer explanations are in the README.
+
 ### Security
 
 * A completed Kakao login now creates a "KakaoTalk login completed" notification, so an
