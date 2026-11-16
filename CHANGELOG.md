@@ -15,6 +15,12 @@
   that fixed thank-you text is answered, and only when this setting is filled in; every
   other request is still refused.
 
+* **Themed pages**: the pages shown after a Kakao login or friend invite (thank-you, permissions
+  not accepted, login errors) and the setup page now use the project icon and colours, in light and
+  dark. The public ones are fixed markup with no external files, escape any text they show, and
+  carry a strict Content-Security-Policy. The thank-you page also removes Kakao's one-time code
+  from the browser's address bar.
+
 ### Security
 
 * A completed Kakao login now creates a "KakaoTalk login completed" notification, so an
@@ -23,6 +29,9 @@
   who sees the address of the page they are sent back to.
 * Pages that can be reached from the internet show fixed text only, never anything taken
   from the request.
+* The login error page shows Kakao's error text only for a login an administrator started;
+  otherwise it shows a fixed message, so a web page cannot make it display its own words.
+* The setup page is served with the same strict Content-Security-Policy as the other pages.
 * Blocked requests from the internet are logged as a warning at most once every 10 minutes,
   so the log cannot be flooded.
 * An image is checked for size before it is read, and requests to Kakao time out after 30

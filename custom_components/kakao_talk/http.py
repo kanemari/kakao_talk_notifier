@@ -25,6 +25,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import is_cloud_connection
 from homeassistant.util.network import is_local
 
+from . import pages
 from .const import (
     ATTR_FRIENDS,
     ATTR_IMAGE,
@@ -84,10 +85,10 @@ INVITE_NOTIFICATION_ID = "kakao_talk_friend_invite"
 # Fixed marker for friend invite links. The callback never exchanges the code of an
 # invite, so it cannot start, replace or complete a login (see KakaoTalkView.get).
 INVITE_STATE = "kakao_talk_invite"
-INVITE_THANKS = "Thank you, your permission was recorded. You can close this page."
+INVITE_THANKS = "Your permission was recorded. You can close this page."
 # Fixed text: nothing from the request is ever shown on a page the internet can reach.
 INVITE_DECLINED = (
-    "The permission was not given. If you want to try again, ask the person who "
+    "Permissions were not accepted. If you want to try again, ask the person who "
     "invited you for the link and open it once more."
 )
 LOGIN_DONE_NOTIFICATION_ID = "kakao_talk_login_done"
@@ -163,6 +164,26 @@ def _plain(text, status=200):
     """A plain-text response that browsers must not reinterpret as HTML."""
     return web.Response(
         text=text, status=status, headers={"X-Content-Type-Options": "nosniff"}
+    )
+
+
+def _themed(title, message, ok=True, status=200):
+    """A small page with the project icon and colours (see pages.py).
+
+    The text is escaped and the page carries a strict Content-Security-Policy. Pass
+    only fixed text, or text that went through _clean_for_log.
+    """
+    return web.Response(
+        text=pages.render(title, message, ok),
+        status=status,
+        content_type="text/html",
+        charset="utf-8",
+        headers={
+            "Content-Security-Policy": pages.CSP,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+        },
     )
 
 
@@ -259,6 +280,10 @@ class KakaoConfig:
         state = secrets.token_urlsafe(32)
         self._login_states[state] = now + LOGIN_STATE_SECONDS
         return state
+
+    def is_live_login_state(self, state):
+        """True if `state` belongs to a login an administrator started (not used up)."""
+        return self._login_states.get(state or "", 0) > time.monotonic()
 
     def consume_login_state(self, state):
         expires = self._login_states.pop(state or "", 0)
@@ -838,7 +863,19 @@ class KakaoTalkView(HomeAssistantView):
 
     async def _page(self):
         content = await self.config.get_setup_page()
-        return web.Response(body=content, content_type="text/html", charset="utf-8")
+        # Browsers hash inline blocks after normalising line ends, so serve "\n" only.
+        content = content.replace("\r\n", "\n").replace("\r", "\n")
+        return web.Response(
+            text=content,
+            content_type="text/html",
+            charset="utf-8",
+            headers={
+                "Content-Security-Policy": pages.csp_for(content),
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
 
     async def get(self, request):
         config = self.config
@@ -866,15 +903,25 @@ class KakaoTalkView(HomeAssistantView):
                     "A friend invite was declined or failed: %s",
                     _clean_for_log(query.get("error"), 60),
                 )
-                return _plain(INVITE_DECLINED)
+                return _themed("Permissions not accepted", INVITE_DECLINED, ok=False)
             _LOGGER.debug("A friend followed the invite link and gave their permission")
-            return _plain(INVITE_THANKS)
+            return _themed("Thank you", INVITE_THANKS)
 
         if "error" in query:
             error = _clean_for_log(query.get("error"))
             description = _clean_for_log(query.get("error_description"))
+            if not self.config.is_live_login_state(query.get("state")):
+                # Not a login we started: a web page could send a browser on the home
+                # network here with words of its own, so never put them on our page.
+                _LOGGER.debug("Ignored an unexpected login error: %s %s", error, description)
+                return _themed(
+                    "Kakao login error",
+                    "Kakao reported a problem with the login. Run the kakao_talk.login "
+                    "action and try again.",
+                    ok=False,
+                )
             _LOGGER.warning("Kakao login error: %s %s", error, description)
-            return _plain(f"{error}: {description}")
+            return _themed("Kakao login error", f"{error}: {description}", ok=False)
 
         if "code" in query:
             if not self.config.consume_login_state(query.get("state")):
@@ -882,16 +929,18 @@ class KakaoTalkView(HomeAssistantView):
                     "Ignored Kakao login callback without a valid state. Start the "
                     "login with the kakao_talk.login action and finish within 10 minutes."
                 )
-                return _plain(
+                return _themed(
+                    "Login not started",
                     "This login was not started from Home Assistant, or it expired. "
                     "Run the kakao_talk.login action and try again.",
-                    400,
+                    ok=False,
+                    status=400,
                 )
             res = await self.config.async_get_token(query["code"])
             if "access_token" not in res:
                 error = _clean_for_log(res.get("error_description") or res)
                 _LOGGER.warning("Kakao login failed: %s", error)
-                return _plain(error)
+                return _themed("Login failed", error, ok=False)
             persistent_notification.async_dismiss(
                 self.config.hass, LOGIN_NOTIFICATION_ID
             )
