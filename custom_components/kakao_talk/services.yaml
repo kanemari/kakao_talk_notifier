@@ -32,6 +32,11 @@ send_message:
         Use this or Image URL, not both.
       selector:
         media:
+          # Without "accept" Home Assistant ties the picker to a media player
+          # entity and leaves it disabled. Needs Home Assistant 2025.7 or newer.
+          accept:
+            - image/jpeg
+            - image/png
     friends:
       name: Friends
       description: >-
