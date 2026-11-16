@@ -195,3 +195,56 @@ async def test_option_defaults_to_off(hass):
     )
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert result["data"]["link_to_image"] is False
+
+
+# ------------------------------------------------------------------ debug line / dummy link
+async def test_debug_log_shows_the_link_sent(hass, entry, kakao_api, caplog):
+    caplog.set_level("DEBUG", logger="custom_components.kakao_talk")
+    await send(hass, url=IMAGE, link_to_image=True)
+    lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("Kakao send to me:")]
+    assert lines == [f"Kakao send to me: type=feed link={IMAGE} button='View'"]
+
+
+async def test_debug_log_for_text_and_retry(hass, entry, aioclient_mock, caplog):
+    caplog.set_level("DEBUG", logger="custom_components.kakao_talk")
+    _refuse_first_memo(aioclient_mock)
+    await send(hass, url=IMAGE, link_to_image=True)
+    lines = [r.getMessage() for r in caplog.records if "send to me" in r.getMessage() and "type=" in r.getMessage()]
+    assert lines == [
+        f"Kakao send to me: type=feed link={IMAGE} button='View'",
+        f"Kakao send to me (retry): type=feed link={HA_LINK} button='View'",
+    ]
+    await send(hass, message="plain")
+    assert any("type=text link=" in r.getMessage() for r in caplog.records)
+
+
+async def test_dummy_link_setting_replaces_home_assistant(hass, kakao_api):
+    """A configured harmless link means no message leads to Home Assistant."""
+    await hass.async_add_executor_job(
+        lambda: open(hass.config.path("kakao.session"), "w").write("rt")
+    )
+    dummy = "https://developers.kakao.com"
+    e = MockConfigEntry(domain=DOMAIN, data={**CONFIG, "link_url": dummy}, title="K")
+    e.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(e.entry_id)
+    await hass.async_block_till_done()
+    await send(hass, message="text")
+    await send(hass, url=IMAGE)
+    await send(hass, message="uploaded", url=IMAGE, link_to_image=True)
+    links = [link(b) for b in posts(kakao_api, MEMO_URL)]
+    assert links == [dummy, dummy, IMAGE]
+    assert HA_LINK not in links
+
+
+async def test_fallback_uses_the_dummy_link(hass, aioclient_mock):
+    await hass.async_add_executor_job(
+        lambda: open(hass.config.path("kakao.session"), "w").write("rt")
+    )
+    dummy = "https://developers.kakao.com"
+    e = MockConfigEntry(domain=DOMAIN, data={**CONFIG, "link_url": dummy}, title="K")
+    e.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(e.entry_id)
+    await hass.async_block_till_done()
+    calls = _refuse_first_memo(aioclient_mock)
+    await send(hass, url=IMAGE, link_to_image=True)
+    assert calls == [IMAGE, dummy]

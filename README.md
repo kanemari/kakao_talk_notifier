@@ -62,7 +62,7 @@ saving reloads it. No `notify:` entry is needed, since the integration provides
 | REST API key (`api_key`) | yes | The REST API key of your Kakao app. |
 | Client secret (`client_secret`) | if enabled | The Client secret of the REST API key. Needed whenever Client secret is enabled in the Kakao console, which is the default. |
 | Home Assistant address (`redirect_uri`) | yes | The local address of Home Assistant, as a full URL starting with `http://` or `https://`, without a path. Kakao sends your browser back to this address plus `/api/kakao_talk` after you log in. |
-| Button link address (`link_url`) | no | The address the button in a message opens. Defaults to the Home Assistant address. Its domain must be registered under *App > Product Link > Web domain*. |
+| Button link address (`link_url`) | no | The address a tapped message (and its button) opens. Defaults to the Home Assistant address. Its domain must be registered under *App > Product Link > Web domain*. To stop taps opening Home Assistant, see [Avoiding Home Assistant on tap](#avoiding-home-assistant-on-tap). |
 | Open the image when tapped (`link_to_image`) | no | Off by default. When on, tapping an image message opens the image instead of Home Assistant. See [What a tap opens](#what-a-tap-opens). |
 | Button label (`button_title`) | no | The label of the button in a message. Defaults to `View`. |
 | Also send to friends (`send_to_friends`) | no | Also sends every message to Kakao Talk friends. Off by default. See [Sending to friends](#sending-to-friends). |
@@ -184,6 +184,31 @@ get the notification (the log says so).
 An image you upload with `image:` is hosted by Kakao, and Kakao may not accept its address
 as a link. If so, tapping opens the normal link; use `url:` with an address on a domain you
 registered to get the image on tap.
+
+#### Avoiding Home Assistant on tap
+
+Kakao has no message without a link, so the link cannot be removed, but it does not have
+to be Home Assistant. Set **Button link address** (`link_url`) under **Configure** to a
+harmless page on a domain you registered at Kakao, for example
+`https://developers.kakao.com`:
+
+1. In the Kakao console, under *App > Product Link > Web domain*, add
+   `https://developers.kakao.com`.
+2. Under **Configure**, set **Button link address** to `https://developers.kakao.com`.
+
+From then on every message opens that page when tapped, and nothing leads to Home
+Assistant. It also becomes the fallback for *Open the image when tapped*. You can still
+override it on a single message with `link_url`.
+
+Kakao has no real image attachment, so an image message is a card: tapping it always opens
+an address, never Kakao's own photo viewer. An image uploaded with `image:` is hosted by
+Kakao (`k.kakaocdn.net`); to open it on tap, also register `https://k.kakaocdn.net` as a web
+domain and turn on *Open the image when tapped*.
+
+If a tap still opens Home Assistant, turn on debug logging for `custom_components.kakao_talk`
+and look at the line `Kakao send to me: type=... link=...`: it shows the exact link sent. If
+that link is what you expect but Kakao opens something else, Kakao replaced a link whose
+domain is not registered.
 
 ### Choosing recipients per message
 

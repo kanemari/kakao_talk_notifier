@@ -51,7 +51,8 @@ send_message:
       description: >-
         Address the message (and its button) opens when tapped, instead of the
         configured one. Its domain must be registered at Kakao. Takes priority over
-        Open the image when tapped.
+        Open the image when tapped. Use a harmless page so a tap does not open
+        Home Assistant.
       example: "https://example.com/doorbell"
       selector:
         text:

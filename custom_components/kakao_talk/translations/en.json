@@ -18,7 +18,7 @@
           "api_key": "The REST API key of your Kakao app.",
           "client_secret": "Needed when the Client secret is enabled in the Kakao console (the default).",
           "redirect_uri": "Local address of Home Assistant, for example http://192.168.1.10:8123, without a path. Register it plus /api/kakao_talk as the Redirect URI at Kakao.",
-          "link_url": "Address the message button opens. Defaults to the Home Assistant address. Its domain must be registered at Kakao.",
+          "link_url": "Address a tapped message (and its button) opens. Defaults to the Home Assistant address. Its domain must be registered at Kakao. To stop taps opening Home Assistant, use a harmless page on a registered domain, for example https://developers.kakao.com.",
           "button_title": "Label of the button in a message.",
           "send_to_friends": "Also send messages to Kakao Talk friends. Log in again after turning this on.",
           "friends": "Nicknames or uuids. Leave empty to send to every friend Kakao returns. Can be overridden per message.",
@@ -53,7 +53,8 @@
         },
         "data_description": {
           "friends": "Pick from the friends Kakao returns, or type a nickname or uuid. Leave empty for every friend.",
-          "link_to_image": "Tapping an image message opens the image instead of Home Assistant. The image's domain must be registered at Kakao (App > Product Link > Web domain); if Kakao refuses the message, it is sent again with the normal link. Can be overridden per message."
+          "link_to_image": "Tapping an image message opens the image instead of Home Assistant. The image's domain must be registered at Kakao (App > Product Link > Web domain); if Kakao refuses the message, it is sent again with the normal link. Can be overridden per message.",
+          "link_url": "Address a tapped message (and its button) opens. Defaults to the Home Assistant address. Its domain must be registered at Kakao. To stop taps opening Home Assistant, use a harmless page on a registered domain, for example https://developers.kakao.com."
         }
       }
     },
