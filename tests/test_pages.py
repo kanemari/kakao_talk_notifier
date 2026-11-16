@@ -6,6 +6,7 @@ import re
 import pytest
 
 from custom_components.kakao_talk import pages
+from custom_components.kakao_talk.const import DOMAIN
 
 from .test_invite import INVITE_STATE, from_internet, public_entry  # noqa: F401  (fixtures)
 
@@ -97,8 +98,12 @@ async def test_forbidden_stays_bare_text(hass, entry, hass_client, from_internet
 
 
 async def test_local_error_text_is_escaped_in_the_page(hass, entry, hass_client):
+    res = await hass.services.async_call(DOMAIN, "login", blocking=True, return_response=True)
+    state = res["url"].split("state=")[1].split("&")[0]
     client = await hass_client()
-    resp = await client.get("/api/kakao_talk", params={"error": "x", "error_description": "<b>bold</b>"})
+    resp = await client.get(
+        "/api/kakao_talk", params={"error": "x", "error_description": "<b>bold</b>", "state": state}
+    )
     body = await resp.text()
     assert "<b>bold</b>" not in body and "&lt;b&gt;bold&lt;/b&gt;" in body
 
@@ -108,3 +113,27 @@ async def test_setup_page_is_themed(hass, entry, hass_client):
     body = await (await client.get("/api/kakao_talk")).text()
     assert "viewBox=\"0 0 128 128\"" in body and "prefers-color-scheme: dark" in body
     assert "kakao_talk.login" in body  # the instructions are still there
+
+
+# ------------------------------------------------------------------ setup page policy
+def test_csp_for_hashes_every_inline_block():
+    doc = "<html><style>a{b:c}</style><p>x</p><script>one()</script><script>two()</script></html>"
+    csp = pages.csp_for(doc)
+    assert "style-src " + sha("a{b:c}") in csp
+    assert "script-src " + sha("one()") + " " + sha("two()") in csp
+    assert "default-src 'none'" in csp and "frame-ancestors 'none'" in csp
+    assert "unsafe-inline" not in csp
+    assert "script-src 'none'" in pages.csp_for("<p>nothing</p>")
+
+
+async def test_setup_page_has_a_strict_policy_matching_its_content(hass, entry, hass_client):
+    client = await hass_client()
+    resp = await client.get("/api/kakao_talk")
+    body = await resp.text()
+    assert "\r" not in body  # line ends are normalised, as the hashes are of that text
+    csp = resp.headers["Content-Security-Policy"]
+    for block in re.findall(r"<style>(.*?)</style>", body, re.S) + re.findall(r"<script>(.*?)</script>", body, re.S):
+        assert sha(block) in csp
+    assert "default-src 'none'" in csp and "unsafe-inline" not in csp
+    assert resp.headers["Cache-Control"] == "no-store"
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"

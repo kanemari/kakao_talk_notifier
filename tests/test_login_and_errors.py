@@ -112,10 +112,32 @@ async def test_callback_token_failure_reported(hass, entry, hass_client, aioclie
 
 
 async def test_callback_error_param(hass, entry, hass_client):
+    """Kakao's error text is shown for a login the administrator started."""
+    state = parse_qs(urlparse(await _login_url(hass)).query)["state"][0]
     client = await hass_client()
-    resp = await client.get("/api/kakao_talk?error=access_denied&error_description=nope")
+    resp = await client.get(f"/api/kakao_talk?error=access_denied&error_description=nope&state={state}")
     assert resp.status == 200
-    assert "access_denied" in await resp.text()
+    body = await resp.text()
+    assert "access_denied" in body and "nope" in body
+    # showing the error does not use the login up: the administrator can retry the link
+    assert hass.data[DOMAIN]["config"].is_live_login_state(state)
+
+
+async def test_unexpected_error_shows_no_text_from_the_request(hass, entry, hass_client, caplog):
+    """A web page can send a browser at home here; its words must not appear on our page."""
+    client = await hass_client()
+    bait = "Session-expired-visit-evil.example"
+    for query in (
+        f"?error={bait}&error_description={bait}",
+        f"?error={bait}&error_description={bait}&state=forged",
+    ):
+        resp = await client.get("/api/kakao_talk" + query)
+        assert resp.status == 200
+        body = await resp.text()
+        assert bait not in body
+        assert "Kakao reported a problem with the login" in body
+    ours = [r for r in caplog.records if r.name.startswith("custom_components") and r.levelno >= 30]
+    assert ours == []  # and it cannot be used to fill the warning log
 
 
 async def test_setup_page_served(hass, entry, hass_client):
@@ -314,10 +336,11 @@ async def test_reload_preserves_services(hass, entry):
 
 # ------------------------------------------------------------------ hardening
 async def test_error_page_is_themed_and_sanitised(hass, entry, hass_client, caplog):
+    state = parse_qs(urlparse(await _login_url(hass)).query)["state"][0]
     client = await hass_client()
     resp = await client.get(
         "/api/kakao_talk",
-        params={"error": "denied", "error_description": "a" * 500},
+        params={"error": "denied", "error_description": "a" * 500, "state": state},
     )
     assert resp.status == 200
     assert resp.headers["Content-Type"].startswith("text/html")

@@ -281,6 +281,10 @@ class KakaoConfig:
         self._login_states[state] = now + LOGIN_STATE_SECONDS
         return state
 
+    def is_live_login_state(self, state):
+        """True if `state` belongs to a login an administrator started (not used up)."""
+        return self._login_states.get(state or "", 0) > time.monotonic()
+
     def consume_login_state(self, state):
         expires = self._login_states.pop(state or "", 0)
         return expires > time.monotonic()
@@ -859,7 +863,19 @@ class KakaoTalkView(HomeAssistantView):
 
     async def _page(self):
         content = await self.config.get_setup_page()
-        return web.Response(body=content, content_type="text/html", charset="utf-8")
+        # Browsers hash inline blocks after normalising line ends, so serve "\n" only.
+        content = content.replace("\r\n", "\n").replace("\r", "\n")
+        return web.Response(
+            text=content,
+            content_type="text/html",
+            charset="utf-8",
+            headers={
+                "Content-Security-Policy": pages.csp_for(content),
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "no-referrer",
+            },
+        )
 
     async def get(self, request):
         config = self.config
@@ -894,6 +910,16 @@ class KakaoTalkView(HomeAssistantView):
         if "error" in query:
             error = _clean_for_log(query.get("error"))
             description = _clean_for_log(query.get("error_description"))
+            if not self.config.is_live_login_state(query.get("state")):
+                # Not a login we started: a web page could send a browser on the home
+                # network here with words of its own, so never put them on our page.
+                _LOGGER.debug("Ignored an unexpected login error: %s %s", error, description)
+                return _themed(
+                    "Kakao login error",
+                    "Kakao reported a problem with the login. Run the kakao_talk.login "
+                    "action and try again.",
+                    ok=False,
+                )
             _LOGGER.warning("Kakao login error: %s %s", error, description)
             return _themed("Kakao login error", f"{error}: {description}", ok=False)
 

@@ -72,6 +72,30 @@ CSP = "; ".join(
 )
 
 
+def csp_for(document):
+    """A Content-Security-Policy for a static page of ours (the setup page).
+
+    Allows exactly the inline style and script blocks the document contains, by
+    hash, and nothing else. The document must use "\n" line ends, as browsers
+    hash the text after normalising them.
+    """
+    import re
+
+    styles = re.findall(r"<style>(.*?)</style>", document, re.S)
+    scripts = re.findall(r"<script>(.*?)</script>", document, re.S)
+    return "; ".join(
+        (
+            "default-src 'none'",
+            "style-src " + (" ".join(_hash(s) for s in styles) or "'none'"),
+            "script-src " + (" ".join(_hash(s) for s in scripts) or "'none'"),
+            "img-src 'none'",
+            "base-uri 'none'",
+            "form-action 'none'",
+            "frame-ancestors 'none'",
+        )
+    )
+
+
 def render(title, message, ok=True):
     """The page for a title and a message (both are escaped). Returns the HTML text."""
     return (

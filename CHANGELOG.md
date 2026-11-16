@@ -29,6 +29,9 @@
   who sees the address of the page they are sent back to.
 * Pages that can be reached from the internet show fixed text only, never anything taken
   from the request.
+* The login error page shows Kakao's error text only for a login an administrator started;
+  otherwise it shows a fixed message, so a web page cannot make it display its own words.
+* The setup page is served with the same strict Content-Security-Policy as the other pages.
 * Blocked requests from the internet are logged as a warning at most once every 10 minutes,
   so the log cannot be flooded.
 * An image is checked for size before it is read, and requests to Kakao time out after 30
