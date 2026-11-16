@@ -15,7 +15,11 @@ from homeassistant.components import persistent_notification
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
 from homeassistant.core import ServiceCall, SupportsResponse, callback
-from homeassistant.exceptions import HomeAssistantError, Unauthorized
+from homeassistant.exceptions import (
+    HomeAssistantError,
+    ServiceValidationError,
+    Unauthorized,
+)
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import is_cloud_connection
@@ -72,6 +76,11 @@ LOGIN_STATE_SECONDS = 600
 MAX_LOGIN_STATES = 5
 LOGIN_NOTIFICATION_ID = "kakao_talk_login"
 
+_LOGIN_REQUIRED = (
+    "Could not sign in to KakaoTalk. Run the kakao_talk.login action to log in "
+    "again; the Home Assistant log has the details."
+)
+
 
 def _is_local_request(hass, request):
     """True if the request appears to come from the local network.
@@ -86,6 +95,19 @@ def _is_local_request(hass, request):
         return is_local(ip_address(request.remote))
     except (TypeError, ValueError):
         return False
+
+
+def _clean_for_log(value, limit=200):
+    """Make untrusted text safe to log or show: single line, no control characters."""
+    text = "".join(c if c.isprintable() else " " for c in str(value or ""))
+    return text[:limit]
+
+
+def _plain(text, status=200):
+    """A plain-text response that browsers must not reinterpret as HTML."""
+    return web.Response(
+        text=text, status=status, headers={"X-Content-Type-Options": "nosniff"}
+    )
 
 
 def _write_private(path, content):
@@ -200,10 +222,14 @@ class KakaoConfig:
         session = async_get_clientsession(self.hass)
         try:
             async with session.post(url, data=data, headers=headers) as r:
-                return json.loads(await r.text(encoding="utf-8"))
+                res = json.loads(await r.text(encoding="utf-8"))
         except (aiohttp.ClientError, ValueError) as exception:
             _LOGGER.error("Kakao request to %s failed: %s", url, exception)
             return None
+        if not isinstance(res, dict):
+            _LOGGER.error("Kakao request to %s returned an unexpected response", url)
+            return None
+        return res
 
     def _token_payload(self, grant_type, **extra):
         payload = {"grant_type": grant_type, "client_id": self._api_key}
@@ -285,6 +311,9 @@ class KakaoConfig:
             except (aiohttp.ClientError, ValueError) as exception:
                 _LOGGER.warning("KakaoTalk [Friends] request failed: %s", exception)
                 return
+            if not isinstance(res, dict):
+                _LOGGER.warning("KakaoTalk [Friends] returned an unexpected response")
+                return
             if "code" in res:
                 _LOGGER.warning("KakaoTalk [Friends] Error : %s", res)
                 return
@@ -314,7 +343,7 @@ class KakaoConfig:
     async def async_list_friends(self):
         """Fetch (fresh) and return the friends Kakao makes available to the app."""
         if not await self._async_refresh_access_token():
-            return []
+            raise HomeAssistantError(_LOGIN_REQUIRED)
         await self._async_get_friends()
         return list(self._friends)
 
@@ -350,7 +379,7 @@ class KakaoConfig:
         uuids, missing = self._recipient_uuids(requested)
         if not uuids:
             if requested is not None:
-                raise HomeAssistantError(
+                raise ServiceValidationError(
                     "None of the requested friends were found: "
                     + ", ".join(requested)
                     + ". Run kakao_talk.list_friends to see who Kakao returns."
@@ -387,14 +416,16 @@ class KakaoConfig:
         if send_to_friends is None:
             send_to_friends = True if friends else self._send_to_friends
         if send_to_friends and not self._send_to_friends:
-            raise HomeAssistantError(
-                "Sending to friends needs send_to_friends: True in the kakao_talk "
-                "configuration, then a restart and a new kakao_talk.login."
+            raise ServiceValidationError(
+                "Sending to friends needs 'Also send to friends' turned on in the "
+                "KakaoTalk Notifier settings, then a new kakao_talk.login."
             )
         if not send_to_me and not send_to_friends:
-            raise HomeAssistantError("Nothing to do: both send_to_me and send_to_friends are off.")
+            raise ServiceValidationError(
+                "Nothing to do: both send_to_me and send_to_friends are off."
+            )
         if not await self._async_refresh_access_token():
-            return
+            raise HomeAssistantError(_LOGIN_REQUIRED)
 
         if send_to_me:
             await self._async_send(
@@ -412,24 +443,24 @@ class KakaoConfig:
 
         media_id = media.get("media_content_id") if isinstance(media, dict) else media
         if not media_id:
-            raise HomeAssistantError("No image selected.")
+            raise ServiceValidationError("No image selected.")
         try:
             item = await media_source.async_resolve_media(self.hass, media_id, None)
         except Exception as exception:  # media_source raises several types
             raise HomeAssistantError(f"Could not open image {media_id}: {exception}") from exception
         path = getattr(item, "path", None)
         if path is None:
-            raise HomeAssistantError(
+            raise ServiceValidationError(
                 "Only images stored on this Home Assistant (local media) can be uploaded."
             )
         content_type = mimetypes.guess_type(path.name)[0]
         if content_type not in IMAGE_TYPES:
-            raise HomeAssistantError("Kakao only accepts JPEG and PNG images.")
+            raise ServiceValidationError("Kakao only accepts JPEG and PNG images.")
         data = await self.hass.async_add_executor_job(path.read_bytes)
         if len(data) > MAX_IMAGE_BYTES:
-            raise HomeAssistantError("Kakao only accepts images up to 5 MB.")
+            raise ServiceValidationError("Kakao only accepts images up to 5 MB.")
         if not await self._async_refresh_access_token():
-            raise HomeAssistantError("Not logged in to KakaoTalk. Run kakao_talk.login.")
+            raise HomeAssistantError(_LOGIN_REQUIRED)
         form = aiohttp.FormData()
         form.add_field("file", data, filename=path.name, content_type=content_type)
         res = await self._post_form(API_IMAGE_UPLOAD, form, self._auth_headers())
@@ -491,7 +522,7 @@ def async_register_services(hass, config):
         message = call.data.get("message", "")
         image_url = call.data.get(ATTR_URL)
         if image_url and call.data.get(ATTR_IMAGE):
-            raise HomeAssistantError("Use either url or image, not both.")
+            raise ServiceValidationError("Use either url or image, not both.")
         if call.data.get(ATTR_IMAGE):
             image_url = await config.async_upload_image(call.data[ATTR_IMAGE])
         options = {
@@ -589,29 +620,22 @@ class KakaoTalkView(HomeAssistantView):
 
     async def get(self, request):
         if self.config is None:
-            return web.Response(status=503, text="KakaoTalk is not set up.")
+            return _plain("KakaoTalk is not set up.", 503)
         # Defence in depth: refuse anything that visibly comes from the internet.
         if not _is_local_request(self.config.hass, request):
             _LOGGER.warning(
                 "Blocked non-local request to the KakaoTalk setup page from %s",
                 request.remote,
             )
-            return web.Response(status=403, text="Forbidden")
+            return _plain("Forbidden", 403)
 
         query = request.rel_url.query
 
         if "error" in query:
-            _LOGGER.warning(
-                "Kakao login error: %s %s",
-                query.get("error"),
-                query.get("error_description", ""),
-            )
-            return web.Response(
-                text="{}: {}".format(
-                    query.get("error"), query.get("error_description", "")
-                ),
-                status=200,
-            )
+            error = _clean_for_log(query.get("error"))
+            description = _clean_for_log(query.get("error_description"))
+            _LOGGER.warning("Kakao login error: %s %s", error, description)
+            return _plain(f"{error}: {description}")
 
         if "code" in query:
             if not self.config.consume_login_state(query.get("state")):
@@ -619,16 +643,16 @@ class KakaoTalkView(HomeAssistantView):
                     "Ignored Kakao login callback without a valid state. Start the "
                     "login with the kakao_talk.login action and finish within 10 minutes."
                 )
-                return web.Response(
-                    text="This login was not started from Home Assistant, or it expired. "
+                return _plain(
+                    "This login was not started from Home Assistant, or it expired. "
                     "Run the kakao_talk.login action and try again.",
-                    status=400,
+                    400,
                 )
             res = await self.config.async_get_token(query["code"])
             if "access_token" not in res:
-                error = res.get("error_description") or str(res)
+                error = _clean_for_log(res.get("error_description") or res)
                 _LOGGER.warning("Kakao login failed: %s", error)
-                return web.Response(text=error, status=200)
+                return _plain(error)
             persistent_notification.async_dismiss(
                 self.config.hass, LOGIN_NOTIFICATION_ID
             )

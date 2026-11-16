@@ -63,3 +63,16 @@ async def entry(hass, kakao_api):
 def posts(mock, url):
     """Form bodies POSTed to url."""
     return [c[2] for c in mock.mock_calls if c[0] == "POST" and str(c[1]) == url]
+
+
+@pytest.fixture(autouse=True)
+def clean_session_file(hass):
+    """The test config dir is shared between tests; never leak a login between them."""
+    import os
+
+    path = hass.config.path("kakao.session")
+    if os.path.exists(path):
+        os.remove(path)
+    yield
+    if os.path.exists(path):
+        os.remove(path)

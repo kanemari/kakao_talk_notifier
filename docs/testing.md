@@ -4,6 +4,15 @@
 
 Real Home Assistant, with the Kakao API mocked.
 
+Home Assistant needs Linux and Python 3.13, so on Windows (or any machine without
+them) run the suite in Docker:
+
+```bash
+bash dev/run-tests.sh
+```
+
+On Linux/macOS with Python 3.13 you can also run it directly:
+
 ```bash
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements_test.txt
@@ -12,7 +21,11 @@ pytest
 
 They cover the UI setup and options flows, the YAML import and its deprecation notice,
 single-instance, per-message `friends` / `send_to_friends` / `send_to_me`, URL and media
-image sending, `list_friends`, `notify.kakao_talk`, and unloading.
+image sending, `list_friends`, `notify.kakao_talk`, and unloading. They also cover the
+Kakao login (admin-only start, single-use state, forged and replayed callbacks, local
+network only, token rotation and a private session file), the clear errors raised when
+logged out, input mistakes being validation errors (HTTP 400), friend chunking and
+paging, image limits, and malformed or failing Kakao responses.
 
 They do **not** prove that Kakao accepts the requests, in particular the image-upload
 endpoint. That needs the manual test below.
