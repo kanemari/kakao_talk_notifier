@@ -1,0 +1,7 @@
+# Keep development-only files out of release archives (git archive / GitHub source zip).
+/tests                  export-ignore
+/dev                    export-ignore
+/pytest.ini             export-ignore
+/requirements_test.txt  export-ignore
+/docs/testing.md        export-ignore
+/.gitattributes         export-ignore

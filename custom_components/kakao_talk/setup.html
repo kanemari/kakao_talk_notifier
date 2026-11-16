@@ -48,13 +48,13 @@ code {
 		<div id="before_login">
 			<p>
 			Before logging in, register a <b>Redirect URI</b> in the Kakao Developers console.
-			If you opened this page at the address set as <code>redirect_uri</code> in your configuration.yaml, it is:
+			If you opened this page at the Home Assistant address you entered in the integration settings, it is:
 			</p>
 			<ul><li><code id="redirect_uri"></code></li></ul>
 			<p>
 			Open <a href="https://developers.kakao.com/">https://developers.kakao.com/</a>, select your app, then go to
 			<i>App &gt; Platform Key &gt; REST API key &gt; Redirect URI</i>.<br>
-			The registered URI must be exactly your <code>redirect_uri</code> followed by <code>/api/kakao_talk</code>.
+			The registered URI must be exactly your Home Assistant address (<code>redirect_uri</code>) followed by <code>/api/kakao_talk</code>.
 			</p>
 			<p>
 			<b>To log in:</b> in Home Assistant, go to <i>Developer tools &gt; Actions</i> and run

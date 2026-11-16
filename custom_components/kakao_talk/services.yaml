@@ -36,14 +36,14 @@ send_message:
       name: Friends
       description: >-
         Nicknames or uuids to send this message to, instead of the friends list in
-        the configuration. See kakao_talk.list_friends. Needs send_to_friends in
-        the configuration.
+        the integration settings. See kakao_talk.list_friends. Needs "Also send to
+        friends" turned on in the integration settings.
       example: '["Alice", "Bob"]'
       selector:
         object:
     send_to_friends:
       name: Send to friends
-      description: Override the configured send_to_friends for this message.
+      description: Override the "Also send to friends" setting for this message.
       selector:
         boolean:
     send_to_me:

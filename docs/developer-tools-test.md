@@ -122,5 +122,9 @@ data:
   fails with an error.
 * `image` uploads a local JPEG/PNG (max 5 MB) to Kakao; `url` is for images already
   public. Use one or the other.
+* If there is no valid Kakao login, sending and `list_friends` fail with "Could not sign
+  in to KakaoTalk" instead of appearing to succeed. Run `kakao_talk.login` (step e).
+* Mistakes in the call itself (both `url` and `image`, both targets off, an unknown
+  friend) are reported as validation errors, not server errors.
 * A template cannot call `list_friends`, so the friend list shows in the Actions response
   panel, not in the Template tab.

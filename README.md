@@ -213,7 +213,7 @@ Things to know:
   delivery failures, including the daily limit.
 * Kakao accepts at most 5 recipients per request. The integration splits larger lists
   automatically.
-* You always receive your own copy of each message as well.
+* You also receive your own copy of each message, unless you set `send_to_me: false`.
 * The friends list is refreshed once an hour. Run `kakao_talk.list_friends` to refresh
   it straight away.
 
@@ -253,7 +253,7 @@ gave when something fails.
 
 | Symptom | Likely cause |
 |---|---|
-| "Not logged in to KakaoTalk" | Run `kakao_talk.login`. |
+| "Could not sign in to KakaoTalk" when sending or listing friends | There is no login yet, or Kakao refused the saved one. Run `kakao_talk.login`; the log has Kakao's reply. |
 | Kakao shows a redirect URI error when logging in | The Redirect URI registered at Kakao does not exactly match `redirect_uri` plus `/api/kakao_talk`. |
 | "This login was not started from Home Assistant, or it expired" | The login link was already used, is older than 10 minutes, or Home Assistant restarted since it was created. Run `kakao_talk.login` again. |
 | The login fails with a client secret error | Set `client_secret`, or check that it is current. |
