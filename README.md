@@ -10,6 +10,9 @@ to your own "My Chatroom", and optionally to Kakao Talk friends.
 Unofficial project, not affiliated with or endorsed by Kakao Corp. KakaoTalk and Kakao are
 trademarks of their owners.
 
+Originally based on the `kakao_talk` integration by musk95 and clipman, now substantially
+rewritten (MIT licensed, see [LICENSE](LICENSE)).
+
 See the [changelog](CHANGELOG.md) for what changed in each version.
 
 Good to know before you start:
