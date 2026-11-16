@@ -128,6 +128,20 @@ On your phone, tap the message and check that the image opens, not Home Assistan
 domain is not registered the message still arrives, tapping opens the normal link, and the
 log says "Sending it again with the normal link".
 
+**j) Friend invite link (administrators only):**
+
+```yaml
+action: kakao_talk.friend_invite_link
+```
+
+A notification shows the link (it is also in the response panel). Open it in a browser signed in
+as an invited friend's Kakao account: you should get Kakao's consent screen for the friends
+list and messages. After you agree, the page may say it cannot be loaded if you are not on
+the home network and no public address is set; that is fine. With **Public address for
+friend invites** set (and registered at Kakao), you should land on a thank-you page instead.
+Then run `kakao_talk.list_friends` as the sender to see whether
+the friend now appears.
+
 **i) Debug log of the link:** add this to `configuration.yaml` (or use *Settings > System >
 Logs > Set log level*), send any message, and read the line `Kakao send to me: type=...
 link=...`:

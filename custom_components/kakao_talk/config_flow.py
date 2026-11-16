@@ -20,6 +20,7 @@ from .const import (
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
     CONF_FRIENDS,
+    CONF_INVITE_REDIRECT_URI,
     CONF_LINK_TO_IMAGE,
     CONF_LINK_URL,
     CONF_REDIRECT_URI,
@@ -66,6 +67,9 @@ def _schema(values: Dict[str, Any], friend_choices=None) -> vol.Schema:
                 CONF_LINK_TO_IMAGE, default=bool(values.get(CONF_LINK_TO_IMAGE))
             ): BooleanSelector(),
             vol.Optional(
+                CONF_INVITE_REDIRECT_URI, description=suggest(CONF_INVITE_REDIRECT_URI)
+            ): _text(TextSelectorType.URL),
+            vol.Optional(
                 CONF_BUTTON_TITLE,
                 default=values.get(CONF_BUTTON_TITLE) or DEFAULT_BUTTON_TITLE,
             ): _text(),
@@ -84,6 +88,8 @@ def _clean(user_input: Dict[str, Any]) -> Dict[str, Any]:
     data[CONF_REDIRECT_URI] = data[CONF_REDIRECT_URI].strip().rstrip("/")
     if CONF_LINK_URL in data:
         data[CONF_LINK_URL] = data[CONF_LINK_URL].strip()
+    if CONF_INVITE_REDIRECT_URI in data:
+        data[CONF_INVITE_REDIRECT_URI] = data[CONF_INVITE_REDIRECT_URI].strip().rstrip("/")
     data[CONF_FRIENDS] = [str(f).strip() for f in data.get(CONF_FRIENDS, []) if str(f).strip()]
     data.setdefault(CONF_BUTTON_TITLE, DEFAULT_BUTTON_TITLE)
     data.setdefault(CONF_SEND_TO_FRIENDS, False)
@@ -93,12 +99,16 @@ def _clean(user_input: Dict[str, Any]) -> Dict[str, Any]:
 
 def _validate(data: Dict[str, Any]) -> Dict[str, str]:
     errors = {}
-    for key in (CONF_REDIRECT_URI, CONF_LINK_URL):
+    for key in (CONF_REDIRECT_URI, CONF_LINK_URL, CONF_INVITE_REDIRECT_URI):
         if key in data:
             try:
                 cv.url(data[key])
             except vol.Invalid:
                 errors[key] = "invalid_url"
+    public = data.get(CONF_INVITE_REDIRECT_URI)
+    if public and CONF_INVITE_REDIRECT_URI not in errors and not public.lower().startswith("https://"):
+        # A friend's one-time code travels in this address over the internet.
+        errors[CONF_INVITE_REDIRECT_URI] = "https_required"
     if not data.get(CONF_API_KEY):
         errors[CONF_API_KEY] = "required"
     return errors
