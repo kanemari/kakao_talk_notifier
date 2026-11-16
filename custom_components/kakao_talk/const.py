@@ -19,6 +19,9 @@ SERVICE_FRIEND_INVITE_LINK = "friend_invite_link"
 
 SESSION_FILE = "kakao.session"
 
+# unique_id of a friend entity is this prefix plus the friend's Kakao uuid
+FRIEND_UNIQUE_PREFIX = "friend_"
+
 ATTR_PHOTO = "photo"
 ATTR_URL = "url"
 ATTR_IMAGE = "image"

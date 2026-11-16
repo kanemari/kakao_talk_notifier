@@ -142,6 +142,11 @@ friend invites** set (and registered at Kakao), you should land on a thank-you p
 Then run `kakao_talk.list_friends` as the sender to see whether
 the friend now appears.
 
+**k) Pick friends by name:** after `kakao_talk.list_friends`, open `kakao_talk.send_message` in
+the visual editor. Under **Targets**, choose a friend (each friend is listed as, for
+example, *KakaoTalk Alice*; only KakaoTalk friends are offered). Send a message with *Send to me* off and check
+that only that friend receives it. Then pick two friends and check both do.
+
 **i) Debug log of the link:** add this to `configuration.yaml` (or use *Settings > System >
 Logs > Set log level*), send any message, and read the line `Kakao send to me: type=...
 link=...`:

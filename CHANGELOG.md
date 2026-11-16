@@ -9,6 +9,11 @@
   the friends and message permissions, instead of having to use the Kakao console's REST API
   test. The link cannot start, replace or complete a login. See
   [Sending to friends](README.md#sending-to-friends).
+* **Pick friends by name**: every friend Kakao returns becomes a notify entity ("KakaoTalk
+  Alice"), and `kakao_talk.send_message` has a **Targets** picker listing them, instead of
+  typing names or looking them up with `list_friends`. Home Assistant's `notify.send_message`
+  can target them too. Friends who leave become unavailable. The typed `friends` field still
+  works. See [Picking friends by name](README.md#picking-friends-by-name).
 * **Public address for friend invites** (optional setting): friends away from home are sent
   back to a public address of your Home Assistant and see a thank-you page, instead of a
   "page cannot be loaded" error. It must be an `https://` address. From the internet only

@@ -21,8 +21,10 @@ from homeassistant.exceptions import (
     Unauthorized,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import is_cloud_connection
+from homeassistant.helpers.service import async_extract_referenced_entity_ids
 from homeassistant.util.network import is_local
 
 from . import pages
@@ -44,6 +46,7 @@ from .const import (
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
     DOMAIN,
+    FRIEND_UNIQUE_PREFIX,
     KAKAO_TALK_API_ENDPOINT,
     SERVICE_LIST_FRIENDS,
     SERVICE_FRIEND_INVITE_LINK,
@@ -232,8 +235,11 @@ class KakaoConfig:
         self._access_token = None
         self._refresh_token = None
 
+        # Called with the friends list each time it is fetched (see notify.py).
+        self._friend_listeners = []
+
         _LOGGER.debug("KakaoConfig %s", self._host)
-        hass.async_create_task(self._load_session())
+        self._session_task = hass.async_create_task(self._load_session())
 
     # ------------------------------------------------------------------ session
     async def _load_session(self):
@@ -243,6 +249,41 @@ class KakaoConfig:
             self._refresh_token = token
         else:
             _LOGGER.warning("Not logged in to KakaoTalk yet; run the kakao_talk.login action")
+
+    def add_friends_listener(self, listener):
+        """Call listener(friends) every time the friends list is fetched. Returns a remover."""
+        self._friend_listeners.append(listener)
+
+        def remove():
+            if listener in self._friend_listeners:
+                self._friend_listeners.remove(listener)
+
+        return remove
+
+    def _notify_friends_changed(self):
+        for listener in list(self._friend_listeners):
+            try:
+                listener(list(self._friends))
+            except Exception:  # a broken listener must not break sending
+                _LOGGER.exception("A friends listener failed")
+
+    async def async_refresh_friends(self):
+        """Fetch the friends list in the background. Never raises."""
+        if not self._send_to_friends:
+            return
+        try:
+            await self._session_task
+            if self._refresh_token and await self._async_refresh_access_token():
+                await self._async_get_friends()
+        except Exception as exception:
+            _LOGGER.debug("Refreshing the friends list failed: %s", exception)
+
+    async def _async_friends_after_login(self):
+        """After a login, fetch the friends with the token we just received."""
+        try:
+            await self._async_get_friends()
+        except Exception as exception:
+            _LOGGER.debug("Fetching the friends after login failed: %s", exception)
 
     async def save_refresh_token(self):
         path = self.hass.config.path(SESSION_FILE)
@@ -384,6 +425,9 @@ class KakaoConfig:
         self._friends = []
         self._friends_fetched = 0.0
         await self.save_refresh_token()
+        if self._send_to_friends:
+            # Show the friends in the Actions form soon after logging in.
+            self.hass.async_create_task(self._async_friends_after_login())
         return res
 
     async def _async_refresh_access_token(self):
@@ -487,6 +531,7 @@ class KakaoConfig:
         self._friends = friends
         self._friends_fetched = time.monotonic()
         _LOGGER.debug("KakaoTalk [Friends] %d friends", len(friends))
+        self._notify_friends_changed()
         if not friends:
             _LOGGER.warning(
                 "Kakao returned no friends. Until the app is reviewed, only Kakao Talk "
@@ -706,6 +751,31 @@ def async_unregister_services(hass):
         hass.services.async_remove(DOMAIN, service)
 
 
+def _friend_uuids_from_target(hass, call):
+    """The Kakao uuids of the friend entities picked as the target of a call.
+
+    Explicitly picked entities must be KakaoTalk friends. Devices and areas are
+    expanded, and anything on them that is not a friend is ignored.
+    """
+    selected = async_extract_referenced_entity_ids(hass, call)
+    registry = er.async_get(hass)
+    uuids = []
+    for group, strict in ((selected.referenced, True), (selected.indirectly_referenced, False)):
+        for entity_id in sorted(group):
+            entry = registry.async_get(entity_id)
+            unique_id = (entry.unique_id or "") if entry else ""
+            if entry and entry.platform == DOMAIN and unique_id.startswith(FRIEND_UNIQUE_PREFIX):
+                uuid = unique_id[len(FRIEND_UNIQUE_PREFIX):]
+                if uuid not in uuids:
+                    uuids.append(uuid)
+            elif strict:
+                raise ServiceValidationError(
+                    f"{entity_id} is not a KakaoTalk friend. Pick friends from the "
+                    "KakaoTalk list, or use the friends field."
+                )
+    return uuids
+
+
 @callback
 def async_register_services(hass, config):
     async def send_message_handler(call: ServiceCall):
@@ -717,8 +787,13 @@ def async_register_services(hass, config):
             raise ServiceValidationError("Use either url or image, not both.")
         if call.data.get(ATTR_IMAGE):
             image_url = await config.async_upload_image(call.data[ATTR_IMAGE])
+        friends = call.data.get(ATTR_FRIENDS)
+        picked = _friend_uuids_from_target(hass, call)
+        if picked:
+            # Friends picked in the form (entities) are added to any names typed in.
+            friends = list(dict.fromkeys([*(friends or []), *picked]))
         options = {
-            "friends": call.data.get(ATTR_FRIENDS),
+            "friends": friends,
             "send_to_friends": call.data.get(ATTR_SEND_TO_FRIENDS),
             "send_to_me": call.data.get(ATTR_SEND_TO_ME, True),
         }
@@ -813,6 +888,7 @@ def async_register_services(hass, config):
             vol.Optional(ATTR_FRIENDS): vol.All(cv.ensure_list, [cv.string]),
             vol.Optional(ATTR_SEND_TO_FRIENDS): cv.boolean,
             vol.Optional(ATTR_SEND_TO_ME): cv.boolean,
+            **cv.TARGET_SERVICE_FIELDS,
         }
     )
 
