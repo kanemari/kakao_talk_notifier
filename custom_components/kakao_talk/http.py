@@ -39,6 +39,7 @@ from .const import (
     CONF_API_KEY,
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
+    CONF_FRIEND_ENTITIES,
     CONF_FRIENDS,
     CONF_INVITE_REDIRECT_URI,
     CONF_LINK_TO_IMAGE,
@@ -228,6 +229,8 @@ class KakaoConfig:
         self._link_to_image = bool(config.get(CONF_LINK_TO_IMAGE))
         self._login_states = {}
         self._send_to_friends = config.get(CONF_SEND_TO_FRIENDS)
+        # Show each friend as a notify entity (on unless the owner turned it off).
+        self._friend_entities = bool(config.get(CONF_FRIEND_ENTITIES, True))
         # Optional filter: nicknames or uuids to send to. Empty means everyone returned.
         self._friend_filter = [str(f).strip().lower() for f in config.get(CONF_FRIENDS) or []]
         self._friends = []  # list of {"uuid": ..., "nickname": ...}
@@ -538,6 +541,11 @@ class KakaoConfig:
                 "friends who are also app members and have consented to 'friends' and "
                 "'talk_message' are returned (see the README)."
             )
+
+    @property
+    def friend_entities_enabled(self):
+        """True if friends should be offered as entities (needs friends to be on)."""
+        return bool(self._send_to_friends) and self._friend_entities
 
     @property
     def send_to_friends(self):

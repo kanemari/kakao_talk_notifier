@@ -322,3 +322,82 @@ def test_no_dependence_on_home_assistants_target_helpers():
     source = open(http.__file__, encoding="utf-8").read()
     assert "async_extract_referenced_entity_ids" not in source
     assert "helpers.target" not in source
+
+
+# ------------------------------------------------------------------ the on/off switch
+async def test_switch_off_creates_no_entities(hass, kakao_api):
+    await setup(hass, friend_entities=False)
+    await list_friends(hass)
+    assert friend_entities(hass) == []
+    assert [e for e in hass.states.async_entity_ids("notify") if "kakaotalk_" in e] == []
+
+
+async def test_switch_off_still_sends_to_typed_friends(hass, kakao_api):
+    await setup(hass, friend_entities=False)
+    await hass.services.async_call(
+        DOMAIN, "send_message", {"message": "hi", "friends": ["Alice"], "send_to_me": False}, blocking=True
+    )
+    assert uuids_sent(kakao_api) == [["u-alice"]]
+
+
+async def test_switch_off_removes_existing_entities(hass, entry):
+    await list_friends(hass)
+    assert len(friend_entities(hass)) == 2
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "friend_entities": False})
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert friend_entities(hass) == []
+    # and turning it back on brings them back at the next fetch
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "friend_entities": True})
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    await list_friends(hass)
+    assert [e.original_name for e in friend_entities(hass)] == ["Alice", "Bob"]
+
+
+async def test_switch_defaults_to_on_for_existing_installs(hass, entry):
+    """Settings saved before the switch existed have no value: that means on."""
+    assert "friend_entities" not in entry.data
+    await list_friends(hass)
+    assert len(friend_entities(hass)) == 2
+
+
+async def test_switch_is_on_for_a_new_setup_and_saved_by_the_options_flow(hass, entry):
+    from homeassistant import config_entries
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] == "abort"  # single instance: use the options flow below
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    schema_keys = {str(k): k for k in result["data_schema"].schema}
+    assert schema_keys["friend_entities"].default() is True
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {**CONFIG, "friend_entities": False}
+    )
+    await hass.async_block_till_done()
+    assert entry.data["friend_entities"] is False
+
+
+async def test_new_setup_defaults_the_switch_on(hass):
+    from homeassistant import config_entries
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"api_key": "k", "redirect_uri": "http://ha.local:8123"}
+    )
+    assert result["data"]["friend_entities"] is True
+
+
+async def test_switch_off_means_the_picker_has_no_friends_but_a_leftover_is_refused(hass, entry, kakao_api):
+    """Only entities that belong to a friend can be targeted; none are left to pick."""
+    await list_friends(hass)
+    hass.config_entries.async_update_entry(entry, data={**entry.data, "friend_entities": False})
+    await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            DOMAIN, "send_message", {"message": "hi", "entity_id": "notify.kakaotalk_alice"}, blocking=True
+        )

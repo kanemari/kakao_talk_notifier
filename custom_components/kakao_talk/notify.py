@@ -101,8 +101,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
         if e.domain == "notify" and (e.unique_id or "").startswith(FRIEND_UNIQUE_PREFIX)
     ]
 
-    if not config.send_to_friends:
-        # Friends are switched off: do not leave friend entities behind.
+    if not config.friend_entities_enabled:
+        # Friends, or friend entities, are switched off: do not leave entities behind.
         for e in known:
             registry.async_remove(e.entity_id)
         return

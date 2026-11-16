@@ -78,6 +78,7 @@ saving reloads it. No `notify:` entry is needed, since the integration provides
 | Open the image when tapped (`link_to_image`) | no | Off by default. When on, tapping an image message opens the image instead of Home Assistant. See [What a tap opens](#what-a-tap-opens). |
 | Button label (`button_title`) | no | The label of the button in a message. Defaults to `View`. |
 | Also send to friends (`send_to_friends`) | no | Also sends every message to Kakao Talk friends. Off by default. See [Sending to friends](#sending-to-friends). |
+| Create friends as entities (`friend_entities`) | no | On by default. Adds each friend as a notify entity so they can be picked by name under **Targets** in the Send message form, see [Picking friends by name](#picking-friends-by-name). Turn off if you do not want friends' names stored and visible to every Home Assistant user; you then type names instead. Only used when *Also send to friends* is on. |
 | Friends to send to (`friends`) | no | Nicknames or uuids. When logged in with friends on, **Configure** offers the friends Kakao returns to pick from. Without any, every friend Kakao returns receives every message. |
 
 ### Migrating from configuration.yaml (deprecated)
@@ -236,7 +237,8 @@ you run `kakao_talk.list_friends`, and by a background check about once an hour.
 * A friend Kakao no longer returns becomes **unavailable**; they come back if Kakao returns
   them again. Entities are kept between restarts, so your automations do not break while
   Kakao is unreachable.
-* Turning **Also send to friends** off removes the friend entities.
+* Turning **Also send to friends** or **Create friends as entities** off removes the friend
+  entities. You can still type names or Kakao IDs in the **Friends** field.
 
 ```yaml
 actions:

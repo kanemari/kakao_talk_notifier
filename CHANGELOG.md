@@ -13,7 +13,8 @@
   Alice"), and `kakao_talk.send_message` has a **Targets** picker listing them, instead of
   typing names or looking them up with `list_friends`. Home Assistant's `notify.send_message`
   can target them too. Friends who leave become unavailable. The typed `friends` field still
-  works. See [Picking friends by name](README.md#picking-friends-by-name).
+  works. Turn it off with **Create friends as entities** in the settings if you do not want
+  friends stored as entities. See [Picking friends by name](README.md#picking-friends-by-name).
 * **Public address for friend invites** (optional setting): friends away from home are sent
   back to a public address of your Home Assistant and see a thank-you page, instead of a
   "page cannot be loaded" error. It must be an `https://` address. From the internet only
