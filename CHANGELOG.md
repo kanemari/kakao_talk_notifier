@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026.11.16.3 (unreleased; betas 2026.11.16.2b1 to 2026.11.16.2b5)
+## 2026.11.16.3 - 2026-11-16
 
 Everything since the last stable release, 2026.11.16.1.
 
