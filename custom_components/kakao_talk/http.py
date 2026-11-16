@@ -322,8 +322,17 @@ class KakaoConfig:
     def _send_failed(res):
         return not res or res.get("result_code", 0) != 0 or "code" in res
 
+    @staticmethod
+    def _describe_template(template):
+        """One line for the debug log: what kind of message and where a tap leads."""
+        link = (template.get("content") or template).get("link") or {}
+        return "type={} link={} button={!r}".format(
+            template.get("object_type"), link.get("web_url"), template.get("button_title")
+        )
+
     async def _async_send_template_object(self, url, extra, template, fallback, what):
         """POST a template. If Kakao refuses it and a fallback is given, retry once with that."""
+        _LOGGER.debug("Kakao %s: %s", what, self._describe_template(template))
         res = await self._async_send(
             url,
             {**extra, "template_object": json.dumps(template, ensure_ascii=False)},
@@ -335,6 +344,7 @@ class KakaoConfig:
                 "image's domain is not registered under Product Link > Web domain). "
                 "Sending it again with the normal link."
             )
+            _LOGGER.debug("Kakao %s (retry): %s", what, self._describe_template(fallback))
             res = await self._async_send(
                 url,
                 {**extra, "template_object": json.dumps(fallback, ensure_ascii=False)},

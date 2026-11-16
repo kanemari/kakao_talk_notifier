@@ -128,6 +128,16 @@ On your phone, tap the message and check that the image opens, not Home Assistan
 domain is not registered the message still arrives, tapping opens the normal link, and the
 log says "Sending it again with the normal link".
 
+**i) Debug log of the link:** add this to `configuration.yaml` (or use *Settings > System >
+Logs > Set log level*), send any message, and read the line `Kakao send to me: type=...
+link=...`:
+
+```yaml
+logger:
+  logs:
+    custom_components.kakao_talk: debug
+```
+
 ## Notes
 
 * `friends`, `send_to_friends` and `send_to_me` are per message. The configured
