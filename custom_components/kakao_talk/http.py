@@ -44,6 +44,7 @@ from .const import (
     DOMAIN,
     KAKAO_TALK_API_ENDPOINT,
     SERVICE_LIST_FRIENDS,
+    SERVICE_FRIEND_INVITE_LINK,
     SERVICE_LOGIN,
     SERVICE_SEND_MESSAGE,
     SESSION_FILE,
@@ -78,6 +79,15 @@ LOGIN_STATE_SECONDS = 600
 # Only this many started logins are remembered at once.
 MAX_LOGIN_STATES = 5
 LOGIN_NOTIFICATION_ID = "kakao_talk_login"
+INVITE_NOTIFICATION_ID = "kakao_talk_friend_invite"
+# Fixed marker for friend invite links. The callback never exchanges the code of an
+# invite, so it cannot start, replace or complete a login (see KakaoTalkView.get).
+INVITE_STATE = "kakao_talk_invite"
+INVITE_THANKS = (
+    "Thank you, your permission was recorded. You can close this page. "
+    "(If your browser says it cannot open this page, that is fine: the permission "
+    "was given before Kakao sent you here.)"
+)
 
 _LOGIN_REQUIRED = (
     "Could not sign in to KakaoTalk. Run the kakao_talk.login action to log in "
@@ -237,6 +247,24 @@ class KakaoConfig:
                 "response_type": "code",
                 "scope": scope,
                 "state": self.new_login_state(),
+            }
+        )
+
+    def invite_url(self):
+        """Kakao consent link to give to a friend, so Kakao records their permission.
+
+        The friend signs in and agrees to the friends and message permissions. The
+        link carries a fixed marker as `state`; when Kakao sends the friend back, the
+        callback shows a thank-you page and ignores the code. It cannot log anyone in
+        to this integration, so it is safe to share with the people you invited.
+        """
+        return OAUTH_AUTHORIZE_URL + "?" + urlencode(
+            {
+                "client_id": self._api_key,
+                "redirect_uri": self.redirect_uri(),
+                "response_type": "code",
+                "scope": "talk_message,friends",
+                "state": INVITE_STATE,
             }
         )
 
@@ -586,7 +614,12 @@ def async_setup_view(hass):
 
 @callback
 def async_unregister_services(hass):
-    for service in (SERVICE_SEND_MESSAGE, SERVICE_LIST_FRIENDS, SERVICE_LOGIN):
+    for service in (
+        SERVICE_SEND_MESSAGE,
+        SERVICE_LIST_FRIENDS,
+        SERVICE_LOGIN,
+        SERVICE_FRIEND_INVITE_LINK,
+    ):
         hass.services.async_remove(DOMAIN, service)
 
 
@@ -626,6 +659,36 @@ def async_register_services(hass, config):
         friends = await config.async_list_friends()
         return {"friends": friends}
 
+    async def _require_admin(call: ServiceCall):
+        """Only an authenticated Home Assistant administrator may continue."""
+        if call.context.user_id:
+            user = await hass.auth.async_get_user(call.context.user_id)
+            if user is None or not user.is_admin:
+                raise Unauthorized(context=call.context)
+
+    async def friend_invite_link_handler(call: ServiceCall):
+        """Give the administrator a link a friend opens to give their permission.
+
+        A friend who should receive messages has to agree once to the friends and
+        message permissions. This link asks for exactly that, instead of the friend
+        having to use the Kakao console. It cannot log anyone in to this integration.
+        """
+        await _require_admin(call)
+        url = config.invite_url()
+        persistent_notification.async_create(
+            hass,
+            f"[Friend invite link]({url})\n\n"
+            "Send this link to a friend you have invited under App > Member in the "
+            "Kakao Developers console. They open it, sign in to Kakao and agree. "
+            "It can be used by any number of friends and does not expire. It cannot "
+            "log anyone in to Home Assistant or replace your own Kakao login.",
+            title="KakaoTalk friend invite",
+            notification_id=INVITE_NOTIFICATION_ID,
+        )
+        if call.return_response:
+            return {"url": url}
+        return None
+
     async def login_handler(call: ServiceCall):
         """Start a Kakao login. Only a Home Assistant admin may do this.
 
@@ -633,10 +696,7 @@ def async_register_services(hass, config):
         so the login link (which carries a single-use state) is only ever given
         to an authenticated admin, never served from the unauthenticated page.
         """
-        if call.context.user_id:
-            user = await hass.auth.async_get_user(call.context.user_id)
-            if user is None or not user.is_admin:
-                raise Unauthorized(context=call.context)
+        await _require_admin(call)
         url = config.authorize_url()
         persistent_notification.async_create(
             hass,
@@ -677,6 +737,13 @@ def async_register_services(hass, config):
         DOMAIN,
         SERVICE_LOGIN,
         login_handler,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_FRIEND_INVITE_LINK,
+        friend_invite_link_handler,
         schema=vol.Schema({}),
         supports_response=SupportsResponse.OPTIONAL,
     )
@@ -724,6 +791,12 @@ class KakaoTalkView(HomeAssistantView):
             description = _clean_for_log(query.get("error_description"))
             _LOGGER.warning("Kakao login error: %s %s", error, description)
             return _plain(f"{error}: {description}")
+
+        if "code" in query and query.get("state") == INVITE_STATE:
+            # A friend gave their permission through the invite link. The code is
+            # deliberately never exchanged: nothing is stored and no login happens.
+            _LOGGER.info("A friend followed the invite link and gave their permission")
+            return _plain(INVITE_THANKS)
 
         if "code" in query:
             if not self.config.consume_login_state(query.get("state")):

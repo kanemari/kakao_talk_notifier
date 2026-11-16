@@ -247,6 +247,7 @@ friends permission); see [Sending to friends](#sending-to-friends).
 | `notify.kakao_talk` | Sends a notification (see the examples above). Home Assistant shows only its generic fields for `notify` actions, so put `photo`, `friends`, `send_to_friends`, `send_to_me`, `link_to_image` and `link_url` in the `data` field (YAML). Handy for existing notify setups. |
 | `kakao_talk.send_message` | The same, called directly; the best choice from the UI, since it has a proper form (including the image picker), with the fields `message` (required), `title`, `url`, `image`, `link_to_image`, `link_url`, `friends`, `send_to_friends` and `send_to_me`. |
 | `kakao_talk.login` | Starts a Kakao login. Administrators only. |
+| `kakao_talk.friend_invite_link` | Returns a link to send to a friend so they can give their permission with a normal Kakao sign-in. Administrators only. See [Sending to friends](#sending-to-friends). |
 | `kakao_talk.list_friends` | Returns the nicknames and uuids of the friends Kakao makes available to your app. |
 
 ## Sending to friends
@@ -265,11 +266,16 @@ use it with a small group of testers:
    message, but you do not need to wait for it.
 3. The sender and each recipient must be Kakao Talk friends, and recipients must not
    have a private profile.
-4. Each **recipient** links to your app once: in the console's **Tools > REST API test**,
-   choose *Retrieve user information*, get a token with the `friends` and `talk_message`
-   scopes, log in as the recipient and accept. Do **not** give recipients a
-   `kakao_talk.login` link: the integration stores a single account, so their login would
-   replace yours.
+4. Each **recipient** gives their permission once. Run **`kakao_talk.friend_invite_link`**
+   (administrators only) and send the link it shows to the friend. They open it, sign in to
+   Kakao and tap agree on the consent screen. If they are not on your home network, their
+   browser may say the page cannot be loaded afterwards; that is fine, because their
+   permission was recorded before Kakao sent them there. The link cannot log anyone in to
+   this integration, so it is safe to share with the people you invited. Do **not** give
+   recipients a `kakao_talk.login` link: the integration stores a single account, so their
+   login would replace yours. (The older way still works: in the console's **Tools > REST API
+   test**, choose *Retrieve user information*, get a token with the `friends` and
+   `talk_message` scopes, log in as the recipient and accept.)
 5. Turn on **Also send to friends** under **Configure** on the integration, then run `kakao_talk.login` and
    log in as the sender again, so that Kakao asks for the friends permission.
 6. Run `kakao_talk.list_friends` to see who Kakao returns. An empty list means one of
@@ -313,6 +319,9 @@ Recommendations:
 * The login notification is visible to everyone who can sign in to your Home Assistant.
   Dismiss it if you do not use the link.
 * Anyone who can sign in to your Home Assistant can send messages with these actions.
+* The friend invite link is meant to be shared with the people you invited. It cannot
+  start, replace or complete a login: when Kakao sends a friend back, the integration shows a
+  thank-you page and ignores the code.
 * The Kakao login is stored in the file `kakao.session` in your configuration folder.
   It is included in backups, so treat those as sensitive.
 
@@ -334,6 +343,7 @@ gave when something fails. To try each feature step by step, follow the
 | Tapping an image does not open the image | *Open the image when tapped* is off, or the image's domain is not registered at Kakao (register `https://k.kakaocdn.net` for picked images). The log says "Sending it again with the normal link" when Kakao refused the link. |
 | "The selected image comes from ... which cannot be uploaded" | Only files in **Local media** (*Media > My media*) can be uploaded. Copy the image there, or use the **Image URL** field. |
 | The **Image** field in the Actions form is greyed out | Needs Home Assistant 2025.7 or newer. |
+| A friend says the page cannot be loaded after accepting the invite | Expected when they are not on your home network. Their permission was recorded before the redirect. Check with `kakao_talk.list_friends`. |
 
 ### Debug logging
 

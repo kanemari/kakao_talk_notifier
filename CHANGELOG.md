@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+* **Friend invite link**: the new `kakao_talk.friend_invite_link` action (administrators
+  only) gives you a link to send to a friend. They open it, sign in to Kakao and agree to
+  the friends and message permissions, instead of having to use the Kakao console's REST API
+  test. The link cannot start, replace or complete a login. See
+  [Sending to friends](README.md#sending-to-friends).
+
 ## 2026.11.16.3 - 2026-11-16
 
 Everything since the last stable release, 2026.11.16.1.

@@ -91,3 +91,12 @@ login:
     Start a KakaoTalk login (administrators only). Creates a notification with a
     single-use login link that expires in 10 minutes. Open the link on a device on
     your home network.
+
+friend_invite_link:
+  name: Friend invite link
+  description: >-
+    Get a link to send to a friend so they can give their permission (friends
+    list and messages) with a normal Kakao sign-in, instead of using the Kakao
+    console. Administrators only. Creates a notification with the link, which
+    cannot log anyone in to this integration. The friend must already be invited
+    under App > Member in the Kakao Developers console.
