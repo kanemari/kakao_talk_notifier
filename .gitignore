@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 dev/config/*
 !dev/config/configuration.yaml
+.venv/
