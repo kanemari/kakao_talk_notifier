@@ -28,6 +28,8 @@ from homeassistant.util.network import is_local
 from .const import (
     ATTR_FRIENDS,
     ATTR_IMAGE,
+    ATTR_LINK_TO_IMAGE,
+    ATTR_LINK_URL,
     ATTR_SEND_TO_FRIENDS,
     ATTR_SEND_TO_ME,
     ATTR_URL,
@@ -35,6 +37,7 @@ from .const import (
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
     CONF_FRIENDS,
+    CONF_LINK_TO_IMAGE,
     CONF_LINK_URL,
     CONF_REDIRECT_URI,
     CONF_SEND_TO_FRIENDS,
@@ -97,6 +100,23 @@ def _is_local_request(hass, request):
         return False
 
 
+_LOCAL_IMAGE_HINT = (
+    "Only image files stored in Home Assistant's Local media (Media > My media) "
+    "can be uploaded: copy the image there and pick it again, or use the Image "
+    "URL field with a public address instead."
+)
+
+
+def _media_source_name(media_id):
+    """Human-readable source of a media-source:// id, for error messages."""
+    text = str(media_id or "")
+    if text.startswith("media-source://"):
+        name = text[len("media-source://"):].split("/", 1)[0]
+        if name:
+            return "the '" + name + "' media source"
+    return "a source other than Local media"
+
+
 def _clean_for_log(value, limit=200):
     """Make untrusted text safe to log or show: single line, no control characters."""
     text = "".join(c if c.isprintable() else " " for c in str(value or ""))
@@ -141,6 +161,8 @@ class KakaoConfig:
         self._host = config.get(CONF_REDIRECT_URI)
         # URL that message buttons link to; its domain must be registered at Kakao.
         self._link_url = config.get(CONF_LINK_URL) or self._host
+        # Open the image itself (not Home Assistant) when an image message is tapped.
+        self._link_to_image = bool(config.get(CONF_LINK_TO_IMAGE))
         self._login_states = {}
         self._send_to_friends = config.get(CONF_SEND_TO_FRIENDS)
         # Optional filter: nicknames or uuids to send to. Empty means everyone returned.
@@ -296,6 +318,30 @@ class KakaoConfig:
             _LOGGER.debug("Kakao %s result: %s", what, res)
         return res
 
+    @staticmethod
+    def _send_failed(res):
+        return not res or res.get("result_code", 0) != 0 or "code" in res
+
+    async def _async_send_template_object(self, url, extra, template, fallback, what):
+        """POST a template. If Kakao refuses it and a fallback is given, retry once with that."""
+        res = await self._async_send(
+            url,
+            {**extra, "template_object": json.dumps(template, ensure_ascii=False)},
+            what,
+        )
+        if fallback is not None and self._send_failed(res):
+            _LOGGER.warning(
+                "Kakao refused the message with the image as its link (usually the "
+                "image's domain is not registered under Product Link > Web domain). "
+                "Sending it again with the normal link."
+            )
+            res = await self._async_send(
+                url,
+                {**extra, "template_object": json.dumps(fallback, ensure_ascii=False)},
+                what,
+            )
+        return res
+
     async def _async_get_friends(self):
         friends = []
         offset = 0
@@ -372,7 +418,7 @@ class KakaoConfig:
             )
         return [f["uuid"] for f in matched], missing
 
-    async def _async_send_to_friends(self, template, requested=None):
+    async def _async_send_to_friends(self, template, requested=None, fallback=None):
         stale = time.monotonic() - self._friends_fetched > FRIENDS_CACHE_SECONDS
         if not self._friends or stale:
             await self._async_get_friends()
@@ -388,12 +434,11 @@ class KakaoConfig:
             return
         for i in range(0, len(uuids), FRIENDS_SEND_CHUNK):
             chunk = uuids[i : i + FRIENDS_SEND_CHUNK]
-            res = await self._async_send(
+            res = await self._async_send_template_object(
                 API_FRIENDS_SEND,
-                {
-                    "receiver_uuids": json.dumps(chunk),
-                    "template_object": json.dumps(template, ensure_ascii=False),
-                },
+                {"receiver_uuids": json.dumps(chunk)},
+                template,
+                fallback,
                 "send to friends",
             )
             for failure in (res or {}).get("failure_info", []):
@@ -405,13 +450,14 @@ class KakaoConfig:
                 )
 
     async def _async_send_template(
-        self, template, friends=None, send_to_friends=None, send_to_me=True
+        self, template, friends=None, send_to_friends=None, send_to_me=True, fallback=None
     ):
         """Send a template.
 
         friends: names/uuids for this message only (overrides the configured list).
         send_to_friends: per-message override of the configured setting.
         send_to_me: also send a copy to My Chatroom.
+        fallback: a template to retry with once if Kakao refuses `template`.
         """
         if send_to_friends is None:
             send_to_friends = True if friends else self._send_to_friends
@@ -428,14 +474,12 @@ class KakaoConfig:
             raise HomeAssistantError(_LOGIN_REQUIRED)
 
         if send_to_me:
-            await self._async_send(
-                API_MEMO_SEND,
-                {"template_object": json.dumps(template, ensure_ascii=False)},
-                "send to me",
+            await self._async_send_template_object(
+                API_MEMO_SEND, {}, template, fallback, "send to me"
             )
 
         if send_to_friends:
-            await self._async_send_to_friends(template, friends or None)
+            await self._async_send_to_friends(template, friends or None, fallback)
 
     async def async_upload_image(self, media):
         """Upload a Home Assistant media item to Kakao and return its public URL."""
@@ -447,11 +491,15 @@ class KakaoConfig:
         try:
             item = await media_source.async_resolve_media(self.hass, media_id, None)
         except Exception as exception:  # media_source raises several types
-            raise HomeAssistantError(f"Could not open image {media_id}: {exception}") from exception
+            raise HomeAssistantError(
+                f"Could not open the selected image ({media_id}): {exception}. "
+                + _LOCAL_IMAGE_HINT
+            ) from exception
         path = getattr(item, "path", None)
         if path is None:
             raise ServiceValidationError(
-                "Only images stored on this Home Assistant (local media) can be uploaded."
+                f"The selected image comes from {_media_source_name(media_id)}, which "
+                "cannot be uploaded to Kakao. " + _LOCAL_IMAGE_HINT
             )
         content_type = mimetypes.guess_type(path.name)[0]
         if content_type not in IMAGE_TYPES:
@@ -471,35 +519,53 @@ class KakaoConfig:
         _LOGGER.debug("Kakao image uploaded: %s", url)
         return url
 
-    def _link(self):
-        return {"web_url": self._link_url, "mobile_web_url": self._link_url}
+    def _link(self, url=None):
+        url = url or self._link_url
+        return {"web_url": url, "mobile_web_url": url}
 
-    async def async_send_text(self, message, **kwargs):
+    async def async_send_text(self, message, link_url=None, **kwargs):
         await self._async_send_template(
             {
                 "object_type": "text",
                 "text": message,
-                "link": self._link(),
+                "link": self._link(link_url),
                 "button_title": self._button_title,
             },
             **kwargs,
         )
 
-    async def async_send_default_template(self, title, message, image_url, **kwargs):
-        await self._async_send_template(
-            {
+    async def async_send_default_template(
+        self, title, message, image_url, link_url=None, link_to_image=None, **kwargs
+    ):
+        """Send an image card.
+
+        Tapping it opens link_url if given, else the image itself when link_to_image
+        (or the setting) is on, else the configured link address.
+        """
+        if link_to_image is None:
+            link_to_image = self._link_to_image
+
+        def template(link):
+            return {
                 "object_type": "feed",
                 "content": {
                     "title": title,
                     "description": message,
                     "image_url": image_url,
-                    "link": self._link(),
+                    "link": self._link(link),
                 },
                 "social": {},
                 "button_title": self._button_title,
-            },
-            **kwargs,
-        )
+            }
+
+        if link_url:
+            primary, fallback = template(link_url), None
+        elif link_to_image:
+            # The image's domain may not be registered at Kakao; retry once if refused.
+            primary, fallback = template(image_url), template(None)
+        else:
+            primary, fallback = template(None), None
+        await self._async_send_template(primary, fallback=fallback, **kwargs)
 
 
 @callback
@@ -530,10 +596,20 @@ def async_register_services(hass, config):
             "send_to_friends": call.data.get(ATTR_SEND_TO_FRIENDS),
             "send_to_me": call.data.get(ATTR_SEND_TO_ME, True),
         }
+        link_url = call.data.get(ATTR_LINK_URL)
         if image_url:
-            await config.async_send_default_template(title, message, image_url, **options)
+            await config.async_send_default_template(
+                title,
+                message,
+                image_url,
+                link_url=link_url,
+                link_to_image=call.data.get(ATTR_LINK_TO_IMAGE),
+                **options,
+            )
             return
-        await config.async_send_text(f"{title}\n\n{message}" if title else message, **options)
+        await config.async_send_text(
+            f"{title}\n\n{message}" if title else message, link_url=link_url, **options
+        )
 
     async def list_friends_handler(call: ServiceCall):
         """Return the friends (nickname + uuid) Kakao makes available to the app."""
@@ -570,6 +646,8 @@ def async_register_services(hass, config):
             vol.Optional(ATTR_TITLE): cv.string,
             vol.Optional(ATTR_URL): cv.string,
             vol.Optional(ATTR_IMAGE): vol.Any(cv.string, dict),
+            vol.Optional(ATTR_LINK_URL): cv.string,
+            vol.Optional(ATTR_LINK_TO_IMAGE): cv.boolean,
             vol.Optional(ATTR_FRIENDS): vol.All(cv.ensure_list, [cv.string]),
             vol.Optional(ATTR_SEND_TO_FRIENDS): cv.boolean,
             vol.Optional(ATTR_SEND_TO_ME): cv.boolean,

@@ -372,3 +372,51 @@ def test_clean_for_log_strips_control_characters_and_caps_length():
     assert _clean_for_log("a\r\nFAKE LOG LINE\x00b") == "a  FAKE LOG LINE b"
     assert _clean_for_log(None) == ""
     assert len(_clean_for_log("x" * 1000)) == 200
+
+
+# ------------------------------------------------------------------ clear image errors
+def _resolve_to(monkeypatch, item):
+    async def fake_resolve(*args):
+        return item
+
+    monkeypatch.setattr("homeassistant.components.media_source.async_resolve_media", fake_resolve)
+
+
+async def test_non_local_image_error_is_clear(hass, entry, monkeypatch):
+    class Item:  # e.g. a camera or add-on source: a URL but no file path
+        path = None
+        url = "/api/frigate/snapshot.jpg"
+
+    _resolve_to(monkeypatch, Item())
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN, "send_message",
+            {"message": "m", "image": {"media_content_id": "media-source://frigate/event/1"}},
+            blocking=True,
+        )
+    text = str(err.value)
+    assert "'frigate' media source" in text
+    assert "My media" in text
+    assert "Image URL" in text
+
+
+async def test_unopenable_image_error_has_hint(hass, entry, monkeypatch):
+    async def boom(*args):
+        raise ValueError("nope")
+
+    monkeypatch.setattr("homeassistant.components.media_source.async_resolve_media", boom)
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            DOMAIN, "send_message", {"message": "m", "image": "/some/url.jpg"}, blocking=True
+        )
+    text = str(err.value)
+    assert "/some/url.jpg" in text and "nope" in text
+    assert "My media" in text
+
+
+def test_media_source_name():
+    from custom_components.kakao_talk.http import _media_source_name
+
+    assert _media_source_name("media-source://camera/abc") == "the 'camera' media source"
+    assert _media_source_name("/api/image.jpg") == "a source other than Local media"
+    assert _media_source_name(None) == "a source other than Local media"

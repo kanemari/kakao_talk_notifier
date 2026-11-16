@@ -113,6 +113,21 @@ data:
     send_to_me: false
 ```
 
+**h) Tap opens the image (register the image's domain at Kakao first):**
+
+```yaml
+action: kakao_talk.send_message
+data:
+  title: Tap test
+  message: Tapping this should open the image
+  url: https://example.com/doorbell.jpg
+  link_to_image: true
+```
+
+On your phone, tap the message and check that the image opens, not Home Assistant. If the
+domain is not registered the message still arrives, tapping opens the normal link, and the
+log says "Sending it again with the normal link".
+
 ## Notes
 
 * `friends`, `send_to_friends` and `send_to_me` are per message. The configured
