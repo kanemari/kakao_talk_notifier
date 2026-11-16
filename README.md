@@ -177,8 +177,8 @@ friends permission); see [Sending to friends](#sending-to-friends).
 
 | Action | What it does |
 |---|---|
-| `notify.kakao_talk` | Sends a notification (see the examples above). |
-| `kakao_talk.send_message` | The same, called directly, with the fields `message` (required), `title`, `url`, `image`, `friends`, `send_to_friends` and `send_to_me`. |
+| `notify.kakao_talk` | Sends a notification (see the examples above). Home Assistant shows only its generic fields for `notify` actions, so put `photo`, `friends`, `send_to_friends` and `send_to_me` in the `data` field (YAML). Handy for existing notify setups. |
+| `kakao_talk.send_message` | The same, called directly; the best choice from the UI, since it has a proper form (including the image picker), with the fields `message` (required), `title`, `url`, `image`, `friends`, `send_to_friends` and `send_to_me`. |
 | `kakao_talk.login` | Starts a Kakao login. Administrators only. |
 | `kakao_talk.list_friends` | Returns the nicknames and uuids of the friends Kakao makes available to your app. |
 
