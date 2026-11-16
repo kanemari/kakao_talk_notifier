@@ -26,7 +26,7 @@
           "friends": "Nicknames or uuids. Leave empty to send to every friend Kakao returns. Can be overridden per message.",
           "link_to_image": "Tapping an image message opens the image instead of Home Assistant. The image's domain must be registered at Kakao (App > Product Link > Web domain); if Kakao refuses the message, it is sent again with the normal link. Can be overridden per message.",
           "invite_redirect_uri": "Optional. A public https:// address of Home Assistant (for example your Nabu Casa or own domain address, without a path) that friends are sent back to after they agree, so it works away from home. Register it plus /api/kakao_talk as a Redirect URI at Kakao. From the internet only the fixed thank-you page of a friend invite is answered. Leave empty to answer nothing from the internet.",
-          "friend_entities": "Adds each friend as a notify entity, so friends can be picked by name under Targets in the Send message form. The names are visible to every Home Assistant user. Turn off to type friend names instead. Only used when Also send to friends is on."
+          "friend_entities": "Pick friends by name in the Send message form. Their names are visible to every Home Assistant user."
         }
       }
     },
@@ -63,7 +63,7 @@
           "link_to_image": "Tapping an image message opens the image instead of Home Assistant. The image's domain must be registered at Kakao (App > Product Link > Web domain); if Kakao refuses the message, it is sent again with the normal link. Can be overridden per message.",
           "link_url": "Address a tapped message (and its button) opens. Defaults to the Home Assistant address. Its domain must be registered at Kakao. To stop taps opening Home Assistant, use a harmless page on a registered domain, for example https://developers.kakao.com.",
           "invite_redirect_uri": "Optional. A public https:// address of Home Assistant (for example your Nabu Casa or own domain address, without a path) that friends are sent back to after they agree, so it works away from home. Register it plus /api/kakao_talk as a Redirect URI at Kakao. From the internet only the fixed thank-you page of a friend invite is answered. Leave empty to answer nothing from the internet.",
-          "friend_entities": "Adds each friend as a notify entity, so friends can be picked by name under Targets in the Send message form. The names are visible to every Home Assistant user. Turn off to type friend names instead. Only used when Also send to friends is on."
+          "friend_entities": "Pick friends by name in the Send message form. Their names are visible to every Home Assistant user."
         }
       }
     },

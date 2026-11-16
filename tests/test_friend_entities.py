@@ -401,3 +401,23 @@ async def test_switch_off_means_the_picker_has_no_friends_but_a_leftover_is_refu
         await hass.services.async_call(
             DOMAIN, "send_message", {"message": "hi", "entity_id": "notify.kakaotalk_alice"}, blocking=True
         )
+
+
+def test_every_form_field_has_a_readable_label():
+    """A field without a label shows its raw key (like friend_entities) in the form."""
+    import json
+    from pathlib import Path
+
+    import custom_components.kakao_talk as component
+    from custom_components.kakao_talk.config_flow import _schema
+
+    base = Path(component.__file__).parent
+    keys = [str(k) for k in _schema({}).schema]
+    for name in ("strings.json", "translations/en.json"):
+        data = json.loads((base / name).read_text(encoding="utf-8"))
+        for section in (data["config"]["step"]["user"], data["options"]["step"]["init"]):
+            for key in keys:
+                label = section["data"].get(key, "")
+                assert label and label != key and " " in label, (name, key, label)
+            help_text = section["data_description"]["friend_entities"]
+            assert 0 < len(help_text) <= 120, help_text  # short help text, not a paragraph
