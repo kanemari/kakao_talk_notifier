@@ -9,6 +9,7 @@ from homeassistant.components.notify import (
     ATTR_TITLE,
 )
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import issue_registry as ir
@@ -34,6 +35,7 @@ from .notify import async_send_notification
 _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_SEND_TO_FRIENDS = False
+PLATFORMS = [Platform.NOTIFY]
 ISSUE_YAML_DEPRECATED = "yaml_deprecated"
 
 # Still accepted so existing installations keep working and can be imported.
@@ -117,6 +119,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_register("notify", DOMAIN, notify_handler, schema=NOTIFY_SCHEMA)
 
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    # One notify entity per friend, so friends can be picked by name in the UI.
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 
 
@@ -125,7 +129,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    async_unregister_services(hass)
-    hass.services.async_remove("notify", DOMAIN)
-    hass.data[DOMAIN]["config"] = None
-    return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        async_unregister_services(hass)
+        hass.services.async_remove("notify", DOMAIN)
+        hass.data[DOMAIN]["config"] = None
+    return unload_ok

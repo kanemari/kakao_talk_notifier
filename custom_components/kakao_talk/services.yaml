@@ -2,6 +2,12 @@ send_message:
   name: Send message
   description: >-
     Send a KakaoTalk message to yourself, and to friends if send_to_friends is on.
+    Pick friends by name under Targets (each friend Kakao returns is listed once
+    "Also send to friends" is on and you are logged in), or type them in Friends.
+  target:
+    entity:
+      integration: kakao_talk
+      domain: notify
   fields:
     title:
       name: Title
@@ -60,8 +66,9 @@ send_message:
       name: Friends
       description: >-
         Nicknames or uuids to send this message to, instead of the friends list in
-        the integration settings. See kakao_talk.list_friends. Needs "Also send to
-        friends" turned on in the integration settings.
+        the integration settings. Added to any friends picked under Targets. See
+        kakao_talk.list_friends. Needs "Also send to friends" turned on in the
+        integration settings.
       example: '["Alice", "Bob"]'
       selector:
         object:

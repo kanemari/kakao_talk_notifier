@@ -11,6 +11,13 @@ them) run the suite in Docker:
 bash dev/run-tests.sh
 ```
 
+To run them on both the oldest supported (2025.7) and the newest Home Assistant, which catches
+moved or deprecated helpers:
+
+```bash
+bash dev/run-tests-matrix.sh
+```
+
 On Linux/macOS with Python 3.13 you can also run it directly:
 
 ```bash

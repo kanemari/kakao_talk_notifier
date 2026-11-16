@@ -78,6 +78,7 @@ saving reloads it. No `notify:` entry is needed, since the integration provides
 | Open the image when tapped (`link_to_image`) | no | Off by default. When on, tapping an image message opens the image instead of Home Assistant. See [What a tap opens](#what-a-tap-opens). |
 | Button label (`button_title`) | no | The label of the button in a message. Defaults to `View`. |
 | Also send to friends (`send_to_friends`) | no | Also sends every message to Kakao Talk friends. Off by default. See [Sending to friends](#sending-to-friends). |
+| Create friends as entities (`friend_entities`) | no | On by default. Adds each friend as a notify entity so they can be picked by name under **Targets** in the Send message form, see [Picking friends by name](#picking-friends-by-name). Turn off if you do not want friends' names stored and visible to every Home Assistant user; you then type names instead. Only used when *Also send to friends* is on. |
 | Friends to send to (`friends`) | no | Nicknames or uuids. When logged in with friends on, **Configure** offers the friends Kakao returns to pick from. Without any, every friend Kakao returns receives every message. |
 
 ### Migrating from configuration.yaml (deprecated)
@@ -220,6 +221,40 @@ and look at the line `Kakao send to me: type=... link=...`: it shows the exact l
 that link is what you expect but Kakao opens something else, Kakao replaced a link whose
 domain is not registered.
 
+### Picking friends by name
+
+With **Also send to friends** on and a login that includes the friends permission, every
+friend Kakao returns appears in Home Assistant as a notify entity named after them, for
+example **KakaoTalk Alice**, all under one device called *KakaoTalk*. They are added when you log in, when
+you run `kakao_talk.list_friends`, and by a background check about once an hour.
+
+* In the **`kakao_talk.send_message`** form, pick one or more friends under **Targets**. Only
+  KakaoTalk friends are offered. Picking the *KakaoTalk* device means all friends. Areas,
+  floors and labels are not supported (you get a clear error). Friends picked there are added
+  to any names typed in the **Friends** field.
+* Home Assistant's own `notify.send_message` can also target a friend entity, to send them a
+  plain message (with an optional title) without writing YAML.
+* A friend Kakao no longer returns becomes **unavailable**; they come back if Kakao returns
+  them again. Entities are kept between restarts, so your automations do not break while
+  Kakao is unreachable.
+* Turning **Also send to friends** or **Create friends as entities** off removes the friend
+  entities. You can still type names or Kakao IDs in the **Friends** field.
+
+```yaml
+actions:
+  - action: kakao_talk.send_message
+    target:
+      entity_id:
+        - notify.kakaotalk_alice
+        - notify.kakaotalk_bob
+    data:
+      message: Dinner is ready.
+      send_to_me: false
+```
+
+The friends' names and Kakao IDs are stored in Home Assistant's entity registry, which every
+Home Assistant user can see.
+
 ### Choosing recipients per message
 
 `kakao_talk.send_message` (and `data:` of `notify.kakao_talk`) accept:
@@ -246,7 +281,7 @@ friends permission); see [Sending to friends](#sending-to-friends).
 | Action | What it does |
 |---|---|
 | `notify.kakao_talk` | Sends a notification (see the examples above). Home Assistant shows only its generic fields for `notify` actions, so put `photo`, `friends`, `send_to_friends`, `send_to_me`, `link_to_image` and `link_url` in the `data` field (YAML). Handy for existing notify setups. |
-| `kakao_talk.send_message` | The same, called directly; the best choice from the UI, since it has a proper form (including the image picker), with the fields `message` (required), `title`, `url`, `image`, `link_to_image`, `link_url`, `friends`, `send_to_friends` and `send_to_me`. |
+| `kakao_talk.send_message` | The same, called directly; the best choice from the UI, since it has a proper form (including the image picker and a friend picker under **Targets**), with the fields `message` (required), `title`, `url`, `image`, `link_to_image`, `link_url`, `friends`, `send_to_friends` and `send_to_me`. |
 | `kakao_talk.login` | Starts a Kakao login. Administrators only. |
 | `kakao_talk.friend_invite_link` | Returns a link to send to a friend so they can give their permission with a normal Kakao sign-in. Administrators only. See [Sending to friends](#sending-to-friends). |
 | `kakao_talk.list_friends` | Returns the nicknames and uuids of the friends Kakao makes available to your app. |
@@ -294,9 +329,12 @@ and 5.
 6. **You: check that they appear.** Run `kakao_talk.list_friends`. The friend's nickname
    should be in the list. If it is not, one of the steps above is not complete for that
    person (see [Troubleshooting](#troubleshooting)).
-7. **You: choose who receives messages.** Add them under **Friends to send to** in
-   **Configure** (without any, **every** friend Kakao returns receives every message, so
-   think about what your notifications contain), or name them per message.
+7. **You: choose who receives messages.** The friend now appears as an entity named after
+   them, for example **KakaoTalk Alice** (after the login, after `kakao_talk.list_friends`, or within an
+   hour). Pick friends by name under **Targets** in the `kakao_talk.send_message` form, see
+   [Picking friends by name](#picking-friends-by-name). Or add them under **Friends to send
+   to** in **Configure** (without any, **every** friend Kakao returns receives every message,
+   so think about what your notifications contain), or type their names per message.
 8. **Try it.** For example, a message to that friend only:
 
    ```yaml
@@ -396,6 +434,8 @@ outsider who could log in would receive your notifications. Three things prevent
   would then go to them until you log in again. You would see the "KakaoTalk login
   completed" notification. Dismiss the login notification if you do not use the link, and
   only give Home Assistant accounts to people you trust.
+* **Friends' names and Kakao IDs are visible to every Home Assistant user** as entities, once
+  friend sending is on.
 * **Anyone who can sign in to your Home Assistant can send messages** and list the friends
   with these actions, including users who are not administrators.
 * **Secrets are stored unencrypted on disk**, as is usual in Home Assistant: the Kakao login
@@ -434,6 +474,7 @@ gave when something fails. To try each feature step by step, follow the
 | "This login was not started from Home Assistant, or it expired" | The login link was already used, is older than 10 minutes, or Home Assistant restarted since it was created. Run `kakao_talk.login` again. |
 | The login fails with a client secret error | Set `client_secret`, or check that it is current. |
 | Messages arrive but with no notification | Expected for messages to yourself. |
+| No friends in the **Targets** list of `kakao_talk.send_message` | **Also send to friends** must be on, you must be logged in with the friends permission, and Kakao must return them: run `kakao_talk.list_friends`. They then appear within seconds (otherwise within an hour). |
 | `kakao_talk.list_friends` returns nothing | See the steps in [Sending to friends](#sending-to-friends). |
 | Tapping a message opens Home Assistant | That is the default link. Set **Button link address** to a harmless page on a registered domain, see [Avoiding Home Assistant on tap](#avoiding-home-assistant-on-tap). Turn on [debug logging](#debug-logging) and check the `link=` in the log. |
 | Tapping an image does not open the image | *Open the image when tapped* is off, or the image's domain is not registered at Kakao (register `https://k.kakaocdn.net` for picked images). The log says "Sending it again with the normal link" when Kakao refused the link. |

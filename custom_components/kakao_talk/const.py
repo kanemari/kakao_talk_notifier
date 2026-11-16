@@ -6,6 +6,7 @@ CONF_API_KEY = "api_key"
 CONF_BUTTON_TITLE = "button_title"
 CONF_CLIENT_SECRET = "client_secret"
 CONF_FRIENDS = "friends"
+CONF_FRIEND_ENTITIES = "friend_entities"
 CONF_INVITE_REDIRECT_URI = "invite_redirect_uri"
 CONF_LINK_TO_IMAGE = "link_to_image"
 CONF_LINK_URL = "link_url"
@@ -18,6 +19,9 @@ SERVICE_LOGIN = "login"
 SERVICE_FRIEND_INVITE_LINK = "friend_invite_link"
 
 SESSION_FILE = "kakao.session"
+
+# unique_id of a friend entity is this prefix plus the friend's Kakao uuid
+FRIEND_UNIQUE_PREFIX = "friend_"
 
 ATTR_PHOTO = "photo"
 ATTR_URL = "url"

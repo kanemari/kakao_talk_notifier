@@ -19,6 +19,7 @@ from .const import (
     CONF_API_KEY,
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
+    CONF_FRIEND_ENTITIES,
     CONF_FRIENDS,
     CONF_INVITE_REDIRECT_URI,
     CONF_LINK_TO_IMAGE,
@@ -76,6 +77,9 @@ def _schema(values: Dict[str, Any], friend_choices=None) -> vol.Schema:
             vol.Optional(
                 CONF_SEND_TO_FRIENDS, default=bool(values.get(CONF_SEND_TO_FRIENDS))
             ): BooleanSelector(),
+            vol.Optional(
+                CONF_FRIEND_ENTITIES, default=bool(values.get(CONF_FRIEND_ENTITIES, True))
+            ): BooleanSelector(),
             vol.Optional(CONF_FRIENDS, description=suggest(CONF_FRIENDS)): friends,
         }
     )
@@ -93,6 +97,7 @@ def _clean(user_input: Dict[str, Any]) -> Dict[str, Any]:
     data[CONF_FRIENDS] = [str(f).strip() for f in data.get(CONF_FRIENDS, []) if str(f).strip()]
     data.setdefault(CONF_BUTTON_TITLE, DEFAULT_BUTTON_TITLE)
     data.setdefault(CONF_SEND_TO_FRIENDS, False)
+    data.setdefault(CONF_FRIEND_ENTITIES, True)
     data.setdefault(CONF_LINK_TO_IMAGE, False)
     return data
 
