@@ -14,6 +14,7 @@ from aiohttp import web
 from homeassistant.components import persistent_notification
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
+from homeassistant.const import ATTR_DEVICE_ID, ATTR_ENTITY_ID
 from homeassistant.core import ServiceCall, SupportsResponse, callback
 from homeassistant.exceptions import (
     HomeAssistantError,
@@ -24,7 +25,6 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import is_cloud_connection
-from homeassistant.helpers.service import async_extract_referenced_entity_ids
 from homeassistant.util.network import is_local
 
 from . import pages
@@ -754,25 +754,47 @@ def async_unregister_services(hass):
 def _friend_uuids_from_target(hass, call):
     """The Kakao uuids of the friend entities picked as the target of a call.
 
-    Explicitly picked entities must be KakaoTalk friends. Devices and areas are
-    expanded, and anything on them that is not a friend is ignored.
+    Uses only the entity and device registries (not Home Assistant's target helpers,
+    whose location and signature change between versions). Explicitly picked
+    entities must be KakaoTalk friends. A device means all the friends on it.
     """
-    selected = async_extract_referenced_entity_ids(hass, call)
+    for key in ("area_id", "floor_id", "label_id"):
+        if call.data.get(key):
+            raise ServiceValidationError(
+                "Pick friends, or the KakaoTalk device, under Targets. Areas, floors "
+                "and labels are not supported."
+            )
     registry = er.async_get(hass)
+
+    def friend_uuid(entry):
+        unique_id = (entry.unique_id or "") if entry else ""
+        if entry and entry.platform == DOMAIN and unique_id.startswith(FRIEND_UNIQUE_PREFIX):
+            return unique_id[len(FRIEND_UNIQUE_PREFIX):]
+        return None
+
     uuids = []
-    for group, strict in ((selected.referenced, True), (selected.indirectly_referenced, False)):
-        for entity_id in sorted(group):
-            entry = registry.async_get(entity_id)
-            unique_id = (entry.unique_id or "") if entry else ""
-            if entry and entry.platform == DOMAIN and unique_id.startswith(FRIEND_UNIQUE_PREFIX):
-                uuid = unique_id[len(FRIEND_UNIQUE_PREFIX):]
-                if uuid not in uuids:
-                    uuids.append(uuid)
-            elif strict:
+
+    def add(uuid):
+        if uuid and uuid not in uuids:
+            uuids.append(uuid)
+
+    entity_ids = call.data.get(ATTR_ENTITY_ID)
+    if entity_ids == "all":
+        for entry in list(registry.entities.values()):
+            add(friend_uuid(entry))
+    elif entity_ids and entity_ids != "none":
+        for entity_id in cv.ensure_list(entity_ids):
+            uuid = friend_uuid(registry.async_get(entity_id))
+            if uuid is None:
                 raise ServiceValidationError(
                     f"{entity_id} is not a KakaoTalk friend. Pick friends from the "
                     "KakaoTalk list, or use the friends field."
                 )
+            add(uuid)
+
+    for device_id in cv.ensure_list(call.data.get(ATTR_DEVICE_ID) or []):
+        for entry in er.async_entries_for_device(registry, device_id):
+            add(friend_uuid(entry))  # anything on the device that is not a friend is ignored
     return uuids
 
 

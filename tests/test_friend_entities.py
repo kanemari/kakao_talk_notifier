@@ -64,8 +64,7 @@ async def test_friends_become_entities_after_list_friends(hass, entry):
 
 async def test_friends_share_one_device(hass, entry):
     await list_friends(hass)
-    devices = dr.async_get(hass).devices
-    ours = [d for d in devices.values() if (DOMAIN, entry.entry_id) in d.identifiers]
+    ours = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     assert len(ours) == 1 and ours[0].name == "KakaoTalk"
     assert {e.device_id for e in friend_entities(hass)} == {ours[0].id}
 
@@ -217,7 +216,7 @@ async def test_target_and_typed_names_are_combined(hass, entry, kakao_api):
 
 async def test_picking_the_device_means_all_friends(hass, entry, kakao_api):
     await list_friends(hass)
-    device = next(d for d in dr.async_get(hass).devices.values() if (DOMAIN, entry.entry_id) in d.identifiers)
+    [device] = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     await hass.services.async_call(
         DOMAIN, "send_message", {"message": "hi", "device_id": device.id, "send_to_me": False}, blocking=True
     )
@@ -289,3 +288,37 @@ def test_action_form_offers_only_kakao_friends_as_targets():
     target = services["send_message"]["target"]
     assert target == {"entity": {"integration": "kakao_talk", "domain": "notify"}}
     assert "friends" in services["send_message"]["fields"]  # typing names still works
+
+
+# ------------------------------------------------------------------ other target kinds
+async def test_areas_are_refused_clearly(hass, entry, kakao_api):
+    await list_friends(hass)
+    with pytest.raises(ServiceValidationError, match="Areas, floors and labels"):
+        await hass.services.async_call(
+            DOMAIN, "send_message", {"message": "hi", "area_id": "kitchen"}, blocking=True
+        )
+    assert posts(kakao_api, FRIENDS_SEND_URL) == [] and posts(kakao_api, MEMO_URL) == []
+
+
+async def test_entity_id_all_means_every_friend(hass, entry, kakao_api):
+    await list_friends(hass)
+    await hass.services.async_call(
+        DOMAIN, "send_message", {"message": "hi", "entity_id": "all", "send_to_me": False}, blocking=True
+    )
+    assert uuids_sent(kakao_api) == [["u-alice", "u-bob"]]
+
+
+async def test_entity_id_none_adds_nothing(hass, entry, kakao_api):
+    await hass.services.async_call(
+        DOMAIN, "send_message", {"message": "hi", "entity_id": "none", "send_to_friends": False}, blocking=True
+    )
+    assert len(posts(kakao_api, MEMO_URL)) == 1 and posts(kakao_api, FRIENDS_SEND_URL) == []
+
+
+def test_no_dependence_on_home_assistants_target_helpers():
+    """Those helpers moved between Home Assistant versions; the registries are stable."""
+    import custom_components.kakao_talk.http as http
+
+    source = open(http.__file__, encoding="utf-8").read()
+    assert "async_extract_referenced_entity_ids" not in source
+    assert "helpers.target" not in source

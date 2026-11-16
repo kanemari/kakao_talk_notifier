@@ -228,8 +228,9 @@ example **KakaoTalk Alice**, all under one device called *KakaoTalk*. They are a
 you run `kakao_talk.list_friends`, and by a background check about once an hour.
 
 * In the **`kakao_talk.send_message`** form, pick one or more friends under **Targets**. Only
-  KakaoTalk friends are offered. Picking the *KakaoTalk* device means all friends. Friends
-  picked there are added to any names typed in the **Friends** field.
+  KakaoTalk friends are offered. Picking the *KakaoTalk* device means all friends. Areas,
+  floors and labels are not supported (you get a clear error). Friends picked there are added
+  to any names typed in the **Friends** field.
 * Home Assistant's own `notify.send_message` can also target a friend entity, to send them a
   plain message (with an optional title) without writing YAML.
 * A friend Kakao no longer returns becomes **unavailable**; they come back if Kakao returns
