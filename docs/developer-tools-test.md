@@ -87,18 +87,40 @@ data:
 action: kakao_talk.login
 ```
 
-## Limits of the current integration
+**f) Image from your media, to one friend only** (use the media picker in UI mode, or
+the `media-source://` id in YAML; replace the nickname with one from step a):
 
-* **Friend selection is not possible per call.** `send_message` only takes `title`,
-  `message` and `url`. Recipients come from `send_to_friends` and the `friends:` list in
-  `configuration.yaml`, and changing them needs a restart. To test one friend, copy their
-  uuid from step (a) into `friends:`.
-* **Image upload is not supported.** Images are URLs only. For a local image, serve it
-  from `/config/www/` (reachable as `/local/...`) and use a public URL such as your
-  Nabu Casa or reverse-proxy address.
+```yaml
+action: kakao_talk.send_message
+data:
+  title: Media test
+  message: Uploaded image to one friend
+  image:
+    media_content_id: media-source://media_source/local/test.jpg
+    media_content_type: image/jpeg
+  friends: ["Alice"]
+  send_to_me: false
+```
+
+**g) Through notify to chosen friends:**
+
+```yaml
+action: notify.kakao_talk
+data:
+  message: notify to chosen friends
+  data:
+    friends: ["Alice"]
+    send_to_me: false
+```
+
+## Notes
+
+* `friends`, `send_to_friends` and `send_to_me` are per message. The configured
+  `friends:` list is only the default.
+* `friends` needs *Also send to friends* turned on in the integration settings (the login must include
+  the friends permission). An unknown friend name is logged, and if none match the action
+  fails with an error.
+* `image` uploads a local JPEG/PNG (max 5 MB) to Kakao; `url` is for images already
+  public. Use one or the other.
 * A template cannot call `list_friends`, so the friend list shows in the Actions response
   panel, not in the Template tab.
-
-Per-call friend selection and image upload would need integration changes (extra
-`send_message` fields such as `friends`, plus a `selector: media` image field that copies
-the file to `/config/www`). Say if you want those added.

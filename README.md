@@ -40,39 +40,50 @@ In the Kakao Developers console (https://developers.kakao.com/), create an app, 
    ```
    http://192.168.1.10:8123/api/kakao_talk
    ```
-   Use the **local** address of Home Assistant. It must match `redirect_uri` below exactly.
+   Use the **local** address of Home Assistant. It must match the Home Assistant address (`redirect_uri`) you enter in the integration exactly.
 4. **Kakao Login > Consent items > Access permission**: set **Send Kakao Talk Message**
    (`talk_message`) to *Optional consent*.
 5. **App > Product Link > Web domain**: register the domain that the button in your
-   messages should open (see `link_url` below). Message sending can fail if the link
+   messages should open (see *Button link address* below). Message sending can fail if the link
    domain is not registered.
 
 ## Configuration
 
-Add the following to `configuration.yaml`:
+Set it up from the UI: **Settings > Devices & services > Add integration > KakaoTalk
+Notifier**. Every setting can be changed later with **Configure** on the integration;
+saving reloads it. No `notify:` entry is needed, since the integration provides
+`notify.kakao_talk` itself.
+
+| Setting | Required | Description |
+|---|---|---|
+| REST API key (`api_key`) | yes | The REST API key of your Kakao app. |
+| Client secret (`client_secret`) | if enabled | The Client secret of the REST API key. Needed whenever Client secret is enabled in the Kakao console, which is the default. |
+| Home Assistant address (`redirect_uri`) | yes | The local address of Home Assistant, as a full URL starting with `http://` or `https://`, without a path. Kakao sends your browser back to this address plus `/api/kakao_talk` after you log in. |
+| Button link address (`link_url`) | no | The address the button in a message opens. Defaults to the Home Assistant address. Its domain must be registered under *App > Product Link > Web domain*. |
+| Button label (`button_title`) | no | The label of the button in a message. Defaults to `View`. |
+| Also send to friends (`send_to_friends`) | no | Also sends every message to Kakao Talk friends. Off by default. See [Sending to friends](#sending-to-friends). |
+| Friends to send to (`friends`) | no | Nicknames or uuids. When logged in with friends on, **Configure** offers the friends Kakao returns to pick from. Without any, every friend Kakao returns receives every message. |
+
+### Migrating from configuration.yaml (deprecated)
+
+Configuring through `configuration.yaml` is **deprecated** and will be removed in a future
+release. If you still have it:
 
 ```yaml
 kakao_talk:
   api_key: YOUR_REST_API_KEY
-  client_secret: YOUR_CLIENT_SECRET
-  redirect_uri: http://192.168.1.10:8123
-
+  ...
 notify:
   - platform: kakao_talk
-    name: kakao_talk
 ```
 
-| Setting | Required | Description |
-|---|---|---|
-| `api_key` | yes | The REST API key of your Kakao app. |
-| `client_secret` | if enabled | The Client secret of the REST API key. Needed whenever Client secret is enabled in the Kakao console, which is the default. |
-| `redirect_uri` | yes | The local address of Home Assistant, as a full URL starting with `http://` or `https://`, without a path. Kakao sends your browser back to this address plus `/api/kakao_talk` after you log in. |
-| `link_url` | no | The address the button in a message opens. Defaults to `redirect_uri`. Its domain must be registered under *App > Product Link > Web domain*. |
-| `button_title` | no | The label of the button in a message. Defaults to `View`. |
-| `send_to_friends` | no | `True` also sends every message to Kakao Talk friends. Defaults to `False`. See [Sending to friends](#sending-to-friends). |
-| `friends` | no | Only used with `send_to_friends`. A list of nicknames or uuids to send to. Without it, every friend Kakao returns receives every message. |
-
-Restart Home Assistant after changing the configuration.
+then on the first start with this version the settings are **imported into the UI
+automatically** (once; afterwards the UI is the source of truth and the YAML values are
+ignored). Home Assistant shows a repair notice asking you to delete the `kakao_talk:` block
+and the `- platform: kakao_talk` entry under `notify:` yourself, then restart. The
+integration does not edit your `configuration.yaml`, since it cannot do so safely
+(comments, `!secret`, includes and packages). The notice disappears once they are gone.
+Your login is kept: the `kakao.session` file is unchanged.
 
 ## Logging in
 
@@ -124,12 +135,49 @@ actions:
 
 ![image_sample](https://user-images.githubusercontent.com/11463289/69052464-6e250900-0a4a-11ea-8c5c-844caa8d9983.png)
 
+### Message with an image from your media
+
+Instead of a public URL you can pick an image from Home Assistant's media (for example
+`/media`). It is uploaded to Kakao, so it need not be reachable from the internet.
+JPEG or PNG, up to 5 MB.
+
+```yaml
+actions:
+  - action: kakao_talk.send_message
+    data:
+      message: Someone is at the door.
+      image:
+        media_content_id: media-source://media_source/local/doorbell.jpg
+        media_content_type: image/jpeg
+```
+
+### Choosing recipients per message
+
+`kakao_talk.send_message` (and `data:` of `notify.kakao_talk`) accept:
+
+* **friends**: nicknames or uuids to message, instead of the `friends:` list in the
+  configuration. Run `kakao_talk.list_friends` to see the names and uuids.
+* **send_to_friends**: override the configured setting for this message.
+* **send_to_me**: set `false` to skip your own copy and message only the friends.
+
+```yaml
+actions:
+  - action: kakao_talk.send_message
+    data:
+      message: Dinner is ready.
+      friends: ["Alice"]
+      send_to_me: false
+```
+
+These need *Also send to friends* turned on in the integration settings (so the login includes the
+friends permission); see [Sending to friends](#sending-to-friends).
+
 ### Actions
 
 | Action | What it does |
 |---|---|
 | `notify.kakao_talk` | Sends a notification (see the examples above). |
-| `kakao_talk.send_message` | The same, called directly, with the fields `message` (required), `title` and `url`. |
+| `kakao_talk.send_message` | The same, called directly, with the fields `message` (required), `title`, `url`, `image`, `friends`, `send_to_friends` and `send_to_me`. |
 | `kakao_talk.login` | Starts a Kakao login. Administrators only. |
 | `kakao_talk.list_friends` | Returns the nicknames and uuids of the friends Kakao makes available to your app. |
 
@@ -154,7 +202,7 @@ use it with a small group of testers:
    scopes, log in as the recipient and accept. Do **not** give recipients a
    `kakao_talk.login` link: the integration stores a single account, so their login would
    replace yours.
-5. Set `send_to_friends: True`, restart Home Assistant, then run `kakao_talk.login` and
+5. Turn on **Also send to friends** under **Configure** on the integration, then run `kakao_talk.login` and
    log in as the sender again, so that Kakao asks for the friends permission.
 6. Run `kakao_talk.list_friends` to see who Kakao returns. An empty list means one of
    the steps above is not complete for that person.

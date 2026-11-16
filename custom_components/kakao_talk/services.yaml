@@ -24,6 +24,35 @@ send_message:
       example: "http://k.kakaocdn.net/dn/bDgfik/btqwQWk4CRU/P6wNJJiQ3Ko21KNE1TiLw1/kakaolink40_original.png"
       selector:
         text:
+    image:
+      name: Image
+      description: >-
+        An image from your Home Assistant media (JPEG or PNG, up to 5 MB). It is
+        uploaded to Kakao, so it does not need to be reachable from the internet.
+        Use this or Image URL, not both.
+      selector:
+        media:
+    friends:
+      name: Friends
+      description: >-
+        Nicknames or uuids to send this message to, instead of the friends list in
+        the configuration. See kakao_talk.list_friends. Needs send_to_friends in
+        the configuration.
+      example: '["Alice", "Bob"]'
+      selector:
+        object:
+    send_to_friends:
+      name: Send to friends
+      description: Override the configured send_to_friends for this message.
+      selector:
+        boolean:
+    send_to_me:
+      name: Send to me
+      description: >-
+        Also send a copy to your own chatroom. Turn off to message only the friends.
+      default: true
+      selector:
+        boolean:
 
 list_friends:
   name: List friends

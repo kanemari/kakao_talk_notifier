@@ -1,5 +1,6 @@
 import json
 import logging
+import mimetypes
 import os
 import secrets
 import time
@@ -14,13 +15,17 @@ from homeassistant.components import persistent_notification
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.notify import ATTR_TITLE
 from homeassistant.core import ServiceCall, SupportsResponse, callback
-from homeassistant.exceptions import Unauthorized
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.network import is_cloud_connection
 from homeassistant.util.network import is_local
 
 from .const import (
+    ATTR_FRIENDS,
+    ATTR_IMAGE,
+    ATTR_SEND_TO_FRIENDS,
+    ATTR_SEND_TO_ME,
     ATTR_URL,
     CONF_API_KEY,
     CONF_BUTTON_TITLE,
@@ -46,6 +51,7 @@ SETUP_PAGE = COMPONENT_DIR / "setup.html"
 OAUTH_AUTHORIZE_URL = "https://kauth.kakao.com/oauth/authorize"
 OAUTH_TOKEN_URL = "https://kauth.kakao.com/oauth/token"
 API_MEMO_SEND = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
+API_IMAGE_UPLOAD = "https://kapi.kakao.com/v2/api/talk/message/image/upload"
 API_FRIENDS = "https://kapi.kakao.com/v1/api/talk/friends"
 API_FRIENDS_SEND = "https://kapi.kakao.com/v1/api/talk/friends/message/default/send"
 
@@ -54,6 +60,10 @@ FRIENDS_PAGE_SIZE = 100
 FRIENDS_SEND_CHUNK = 5
 # How long the friends list is cached before it is fetched again.
 FRIENDS_CACHE_SECONDS = 3600
+
+# Kakao accepts JPEG and PNG images up to 5 MB for upload.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+IMAGE_TYPES = ("image/jpeg", "image/png")
 
 DEFAULT_BUTTON_TITLE = "View"
 
@@ -298,6 +308,10 @@ class KakaoConfig:
                 "'talk_message' are returned (see the README)."
             )
 
+    @property
+    def send_to_friends(self):
+        return bool(self._send_to_friends)
+
     async def async_list_friends(self):
         """Fetch (fresh) and return the friends Kakao makes available to the app."""
         if not await self._async_refresh_access_token():
@@ -305,10 +319,16 @@ class KakaoConfig:
         await self._async_get_friends()
         return list(self._friends)
 
-    def _recipient_uuids(self):
-        if not self._friend_filter:
-            return [f["uuid"] for f in self._friends]
-        wanted = set(self._friend_filter)
+    def _recipient_uuids(self, requested=None):
+        """Return (uuids, unmatched) for the requested names/uuids, or the configured filter."""
+        wanted_list = (
+            [str(f).strip().lower() for f in requested]
+            if requested is not None
+            else self._friend_filter
+        )
+        if not wanted_list:
+            return [f["uuid"] for f in self._friends], []
+        wanted = set(wanted_list)
         matched = [
             f
             for f in self._friends
@@ -317,20 +337,25 @@ class KakaoConfig:
         found = {f["uuid"].lower() for f in matched} | {
             f["nickname"].strip().lower() for f in matched
         }
-        missing = wanted - found
+        missing = sorted(wanted - found)
         if missing:
             _LOGGER.warning(
-                "Configured friends not found in the friends Kakao returned: %s",
-                sorted(missing),
+                "Friends not found in the friends Kakao returned: %s", ", ".join(missing)
             )
-        return [f["uuid"] for f in matched]
+        return [f["uuid"] for f in matched], missing
 
-    async def _async_send_to_friends(self, template):
+    async def _async_send_to_friends(self, template, requested=None):
         stale = time.monotonic() - self._friends_fetched > FRIENDS_CACHE_SECONDS
         if not self._friends or stale:
             await self._async_get_friends()
-        uuids = self._recipient_uuids()
+        uuids, missing = self._recipient_uuids(requested)
         if not uuids:
+            if requested is not None:
+                raise HomeAssistantError(
+                    "None of the requested friends were found: "
+                    + ", ".join(requested)
+                    + ". Run kakao_talk.list_friends to see who Kakao returns."
+                )
             _LOGGER.warning("send_to_friends is on but there are no recipients")
             return
         for i in range(0, len(uuids), FRIENDS_SEND_CHUNK):
@@ -351,33 +376,86 @@ class KakaoConfig:
                     failure.get("code"),
                 )
 
-    async def _async_send_template(self, template):
+    async def _async_send_template(
+        self, template, friends=None, send_to_friends=None, send_to_me=True
+    ):
+        """Send a template.
+
+        friends: names/uuids for this message only (overrides the configured list).
+        send_to_friends: per-message override of the configured setting.
+        send_to_me: also send a copy to My Chatroom.
+        """
+        if send_to_friends is None:
+            send_to_friends = True if friends else self._send_to_friends
+        if send_to_friends and not self._send_to_friends:
+            raise HomeAssistantError(
+                "Sending to friends needs send_to_friends: True in the kakao_talk "
+                "configuration, then a restart and a new kakao_talk.login."
+            )
+        if not send_to_me and not send_to_friends:
+            raise HomeAssistantError("Nothing to do: both send_to_me and send_to_friends are off.")
         if not await self._async_refresh_access_token():
             return
 
-        await self._async_send(
-            API_MEMO_SEND,
-            {"template_object": json.dumps(template, ensure_ascii=False)},
-            "send to me",
-        )
+        if send_to_me:
+            await self._async_send(
+                API_MEMO_SEND,
+                {"template_object": json.dumps(template, ensure_ascii=False)},
+                "send to me",
+            )
 
-        if self._send_to_friends:
-            await self._async_send_to_friends(template)
+        if send_to_friends:
+            await self._async_send_to_friends(template, friends or None)
+
+    async def async_upload_image(self, media):
+        """Upload a Home Assistant media item to Kakao and return its public URL."""
+        from homeassistant.components import media_source
+
+        media_id = media.get("media_content_id") if isinstance(media, dict) else media
+        if not media_id:
+            raise HomeAssistantError("No image selected.")
+        try:
+            item = await media_source.async_resolve_media(self.hass, media_id, None)
+        except Exception as exception:  # media_source raises several types
+            raise HomeAssistantError(f"Could not open image {media_id}: {exception}") from exception
+        path = getattr(item, "path", None)
+        if path is None:
+            raise HomeAssistantError(
+                "Only images stored on this Home Assistant (local media) can be uploaded."
+            )
+        content_type = mimetypes.guess_type(path.name)[0]
+        if content_type not in IMAGE_TYPES:
+            raise HomeAssistantError("Kakao only accepts JPEG and PNG images.")
+        data = await self.hass.async_add_executor_job(path.read_bytes)
+        if len(data) > MAX_IMAGE_BYTES:
+            raise HomeAssistantError("Kakao only accepts images up to 5 MB.")
+        if not await self._async_refresh_access_token():
+            raise HomeAssistantError("Not logged in to KakaoTalk. Run kakao_talk.login.")
+        form = aiohttp.FormData()
+        form.add_field("file", data, filename=path.name, content_type=content_type)
+        res = await self._post_form(API_IMAGE_UPLOAD, form, self._auth_headers())
+        url = (((res or {}).get("infos") or {}).get("original") or {}).get("url")
+        if not url:
+            _LOGGER.error("Kakao image upload failed: %s", res)
+            raise HomeAssistantError("Kakao rejected the image upload, see the log.")
+        _LOGGER.debug("Kakao image uploaded: %s", url)
+        return url
 
     def _link(self):
         return {"web_url": self._link_url, "mobile_web_url": self._link_url}
 
-    async def async_send_text(self, message):
+    async def async_send_text(self, message, **kwargs):
         await self._async_send_template(
             {
                 "object_type": "text",
                 "text": message,
                 "link": self._link(),
                 "button_title": self._button_title,
-            }
+            },
+            **kwargs,
         )
 
-    async def async_send_default_template(self, title, message, image_url):
+    async def async_send_default_template(self, title, message, image_url, **kwargs):
         await self._async_send_template(
             {
                 "object_type": "feed",
@@ -389,24 +467,43 @@ class KakaoConfig:
                 },
                 "social": {},
                 "button_title": self._button_title,
-            }
+            },
+            **kwargs,
         )
 
 
 @callback
-def async_register_http(hass, cfg):
-    config = KakaoConfig(hass, cfg)
-    hass.http.register_view(KakaoTalkView(config))
+def async_setup_view(hass):
+    """Register the setup page / OAuth callback once. It finds the active entry itself."""
+    hass.http.register_view(KakaoTalkView(hass))
 
+
+@callback
+def async_unregister_services(hass):
+    for service in (SERVICE_SEND_MESSAGE, SERVICE_LIST_FRIENDS, SERVICE_LOGIN):
+        hass.services.async_remove(DOMAIN, service)
+
+
+@callback
+def async_register_services(hass, config):
     async def send_message_handler(call: ServiceCall):
         """Handle the kakao_talk.send_message service."""
         title = call.data.get(ATTR_TITLE) or ""
         message = call.data.get("message", "")
         image_url = call.data.get(ATTR_URL)
+        if image_url and call.data.get(ATTR_IMAGE):
+            raise HomeAssistantError("Use either url or image, not both.")
+        if call.data.get(ATTR_IMAGE):
+            image_url = await config.async_upload_image(call.data[ATTR_IMAGE])
+        options = {
+            "friends": call.data.get(ATTR_FRIENDS),
+            "send_to_friends": call.data.get(ATTR_SEND_TO_FRIENDS),
+            "send_to_me": call.data.get(ATTR_SEND_TO_ME, True),
+        }
         if image_url:
-            await config.async_send_default_template(title, message, image_url)
+            await config.async_send_default_template(title, message, image_url, **options)
             return
-        await config.async_send_text(f"{title}\n\n{message}" if title else message)
+        await config.async_send_text(f"{title}\n\n{message}" if title else message, **options)
 
     async def list_friends_handler(call: ServiceCall):
         """Return the friends (nickname + uuid) Kakao makes available to the app."""
@@ -442,6 +539,10 @@ def async_register_http(hass, cfg):
             vol.Required("message"): vol.All(cv.string, vol.Length(min=1)),
             vol.Optional(ATTR_TITLE): cv.string,
             vol.Optional(ATTR_URL): cv.string,
+            vol.Optional(ATTR_IMAGE): vol.Any(cv.string, dict),
+            vol.Optional(ATTR_FRIENDS): vol.All(cv.ensure_list, [cv.string]),
+            vol.Optional(ATTR_SEND_TO_FRIENDS): cv.boolean,
+            vol.Optional(ATTR_SEND_TO_ME): cv.boolean,
         }
     )
 
@@ -475,14 +576,21 @@ class KakaoTalkView(HomeAssistantView):
     name = "api:kakao_talk"
     requires_auth = False
 
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, hass):
+        self._hass = hass
+
+    @property
+    def config(self):
+        """The KakaoConfig of the loaded config entry, or None."""
+        return self._hass.data.get(DOMAIN, {}).get("config")
 
     async def _page(self):
         content = await self.config.get_setup_page()
         return web.Response(body=content, content_type="text/html", charset="utf-8")
 
     async def get(self, request):
+        if self.config is None:
+            return web.Response(status=503, text="KakaoTalk is not set up.")
         # Defence in depth: refuse anything that visibly comes from the internet.
         if not _is_local_request(self.config.hass, request):
             _LOGGER.warning(
