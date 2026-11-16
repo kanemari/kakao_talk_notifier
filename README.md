@@ -19,6 +19,9 @@ Good to know before you start:
 
 ## Installation
 
+Requires Home Assistant 2025.7 or newer (the image picker of `kakao_talk.send_message`
+needs it).
+
 With HACS:
 
 1. Open the HACS menu and choose **Custom repositories**.

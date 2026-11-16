@@ -129,3 +129,18 @@ async def test_notify_with_photos_and_friends(hass, entry, kakao_api):
     assert len(sent) == 2  # one message per photo
     assert all(json.loads(b["receiver_uuids"]) == ["u-bob"] for b in sent)
     assert posts(kakao_api, MEMO_URL) == []
+
+
+def test_image_selector_is_usable_in_the_ui():
+    """A media selector without `accept` is disabled in the UI (it wants a media player)."""
+    from pathlib import Path
+
+    from homeassistant.helpers import selector
+    from homeassistant.util.yaml import load_yaml
+
+    import custom_components.kakao_talk as component
+
+    services = load_yaml(str(Path(component.__file__).parent / "services.yaml"))
+    field = services["send_message"]["fields"]["image"]
+    assert field["selector"]["media"]["accept"] == ["image/jpeg", "image/png"]
+    selector.selector(field["selector"])  # valid for this Home Assistant version
