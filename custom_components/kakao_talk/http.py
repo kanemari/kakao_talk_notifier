@@ -88,7 +88,7 @@ INVITE_STATE = "kakao_talk_invite"
 INVITE_THANKS = "Your permission was recorded. You can close this page."
 # Fixed text: nothing from the request is ever shown on a page the internet can reach.
 INVITE_DECLINED = (
-    "The permission was not given. If you want to try again, ask the person who "
+    "Permissions were not accepted. If you want to try again, ask the person who "
     "invited you for the link and open it once more."
 )
 LOGIN_DONE_NOTIFICATION_ID = "kakao_talk_login_done"
@@ -887,7 +887,7 @@ class KakaoTalkView(HomeAssistantView):
                     "A friend invite was declined or failed: %s",
                     _clean_for_log(query.get("error"), 60),
                 )
-                return _themed("Permission not given", INVITE_DECLINED, ok=False)
+                return _themed("Permissions not accepted", INVITE_DECLINED, ok=False)
             _LOGGER.debug("A friend followed the invite link and gave their permission")
             return _themed("Thank you", INVITE_THANKS)
 

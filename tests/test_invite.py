@@ -191,8 +191,8 @@ async def test_internet_declined_invite_gets_a_fixed_text(hass, public_entry, ha
     resp = await client.get(f"/api/kakao_talk?error=access_denied&state={INVITE_STATE}")
     assert resp.status == 200
     body = await resp.text()
-    assert "<h1>Permission not given</h1>" in body
-    assert "The permission was not given." in body
+    assert "<h1>Permissions not accepted</h1>" in body
+    assert "Permissions were not accepted." in body
 
 
 async def test_internet_duplicate_parameters_cannot_reach_a_login(hass, public_entry, hass_client, kakao_api, monkeypatch):
@@ -377,5 +377,5 @@ async def test_decline_shows_a_fixed_message(hass, entry, hass_client):
     )
     assert resp.status == 200
     text = await resp.text()
-    assert "The permission was not given." in text
+    assert "Permissions were not accepted." in text
     assert "access_denied" not in text and "cancelled" not in text
