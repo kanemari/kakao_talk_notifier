@@ -24,13 +24,14 @@
           "send_to_friends": "Also send messages to Kakao Talk friends. Log in again after turning this on.",
           "friends": "Nicknames or uuids. Leave empty to send to every friend Kakao returns. Can be overridden per message.",
           "link_to_image": "Tapping an image message opens the image instead of Home Assistant. The image's domain must be registered at Kakao (App > Product Link > Web domain); if Kakao refuses the message, it is sent again with the normal link. Can be overridden per message.",
-          "invite_redirect_uri": "Optional. A public address of Home Assistant (for example your Nabu Casa or own domain address, without a path) that friends are sent back to after they agree, so it works away from home. Register it plus /api/kakao_talk as a Redirect URI at Kakao. From the internet only the friend invite thank-you page is reachable."
+          "invite_redirect_uri": "Optional. A public https:// address of Home Assistant (for example your Nabu Casa or own domain address, without a path) that friends are sent back to after they agree, so it works away from home. Register it plus /api/kakao_talk as a Redirect URI at Kakao. From the internet only the fixed thank-you page of a friend invite is answered. Leave empty to answer nothing from the internet."
         }
       }
     },
     "error": {
       "invalid_url": "Enter a full address starting with http:// or https://.",
-      "required": "This field is required."
+      "required": "This field is required.",
+      "https_required": "The public address must start with https://, because it is used over the internet."
     },
     "abort": {
       "single_instance_allowed": "KakaoTalk Notifier is already set up.",
@@ -58,13 +59,14 @@
           "friends": "Pick from the friends Kakao returns, or type a nickname or uuid. Leave empty for every friend.",
           "link_to_image": "Tapping an image message opens the image instead of Home Assistant. The image's domain must be registered at Kakao (App > Product Link > Web domain); if Kakao refuses the message, it is sent again with the normal link. Can be overridden per message.",
           "link_url": "Address a tapped message (and its button) opens. Defaults to the Home Assistant address. Its domain must be registered at Kakao. To stop taps opening Home Assistant, use a harmless page on a registered domain, for example https://developers.kakao.com.",
-          "invite_redirect_uri": "Optional. A public address of Home Assistant (for example your Nabu Casa or own domain address, without a path) that friends are sent back to after they agree, so it works away from home. Register it plus /api/kakao_talk as a Redirect URI at Kakao. From the internet only the friend invite thank-you page is reachable."
+          "invite_redirect_uri": "Optional. A public https:// address of Home Assistant (for example your Nabu Casa or own domain address, without a path) that friends are sent back to after they agree, so it works away from home. Register it plus /api/kakao_talk as a Redirect URI at Kakao. From the internet only the fixed thank-you page of a friend invite is answered. Leave empty to answer nothing from the internet."
         }
       }
     },
     "error": {
       "invalid_url": "Enter a full address starting with http:// or https://.",
-      "required": "This field is required."
+      "required": "This field is required.",
+      "https_required": "The public address must start with https://, because it is used over the internet."
     }
   },
   "issues": {

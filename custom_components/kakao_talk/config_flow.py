@@ -105,6 +105,10 @@ def _validate(data: Dict[str, Any]) -> Dict[str, str]:
                 cv.url(data[key])
             except vol.Invalid:
                 errors[key] = "invalid_url"
+    public = data.get(CONF_INVITE_REDIRECT_URI)
+    if public and CONF_INVITE_REDIRECT_URI not in errors and not public.lower().startswith("https://"):
+        # A friend's one-time code travels in this address over the internet.
+        errors[CONF_INVITE_REDIRECT_URI] = "https_required"
     if not data.get(CONF_API_KEY):
         errors[CONF_API_KEY] = "required"
     return errors

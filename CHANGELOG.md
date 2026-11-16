@@ -11,8 +11,23 @@
   [Sending to friends](README.md#sending-to-friends).
 * **Public address for friend invites** (optional setting): friends away from home are sent
   back to a public address of your Home Assistant and see a thank-you page, instead of a
-  "page cannot be loaded" error. From the internet only that thank-you page is answered;
-  every other request is still refused.
+  "page cannot be loaded" error. It must be an `https://` address. From the internet only
+  that fixed thank-you text is answered, and only when this setting is filled in; every
+  other request is still refused.
+
+### Security
+
+* A completed Kakao login now creates a "KakaoTalk login completed" notification, so an
+  unexpected login is noticed.
+* Friend invites require a Client secret, so a friend's one-time code is useless to anyone
+  who sees the address of the page they are sent back to.
+* Pages that can be reached from the internet show fixed text only, never anything taken
+  from the request.
+* Blocked requests from the internet are logged as a warning at most once every 10 minutes,
+  so the log cannot be flooded.
+* An image is checked for size before it is read, and requests to Kakao time out after 30
+  seconds.
+* The README has a full description of what `/api/kakao_talk` does and which risks remain.
 
 ## 2026.11.16.3 - 2026-11-16
 

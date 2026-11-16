@@ -84,11 +84,36 @@ INVITE_NOTIFICATION_ID = "kakao_talk_friend_invite"
 # Fixed marker for friend invite links. The callback never exchanges the code of an
 # invite, so it cannot start, replace or complete a login (see KakaoTalkView.get).
 INVITE_STATE = "kakao_talk_invite"
-INVITE_THANKS = (
-    "Thank you, your permission was recorded. You can close this page. "
-    "(If your browser says it cannot open this page, that is fine: the permission "
-    "was given before Kakao sent you here.)"
+INVITE_THANKS = "Thank you, your permission was recorded. You can close this page."
+# Fixed text: nothing from the request is ever shown on a page the internet can reach.
+INVITE_DECLINED = (
+    "The permission was not given. If you want to try again, ask the person who "
+    "invited you for the link and open it once more."
 )
+LOGIN_DONE_NOTIFICATION_ID = "kakao_talk_login_done"
+
+# Kakao calls must not hang a Home Assistant action or the login callback.
+REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
+# A blocked request from the internet is logged as a warning at most this often,
+# so that a stranger cannot fill the log.
+BLOCKED_LOG_SECONDS = 600
+_blocked_logged_at = float("-inf")
+
+
+def _log_blocked(remote):
+    global _blocked_logged_at
+    now = time.monotonic()
+    if now - _blocked_logged_at >= BLOCKED_LOG_SECONDS:
+        _blocked_logged_at = now
+        _LOGGER.warning(
+            "Blocked a request to the KakaoTalk page that did not come from the local "
+            "network (from %s). Further blocked requests are logged at debug level "
+            "for the next 10 minutes.",
+            remote,
+        )
+    else:
+        _LOGGER.debug("Blocked non-local request to the KakaoTalk page from %s", remote)
 
 _LOGIN_REQUIRED = (
     "Could not sign in to KakaoTalk. Run the kakao_talk.login action to log in "
@@ -254,6 +279,15 @@ class KakaoConfig:
             }
         )
 
+    @property
+    def invite_is_public(self):
+        """True if friends may come back from an invite over the internet."""
+        return bool(self._invite_host)
+
+    @property
+    def has_client_secret(self):
+        return bool(self._client_secret)
+
     def invite_redirect_uri(self):
         """Where Kakao sends a friend back after they agree.
 
@@ -283,9 +317,11 @@ class KakaoConfig:
     async def _post_form(self, url, data, headers=None):
         session = async_get_clientsession(self.hass)
         try:
-            async with session.post(url, data=data, headers=headers) as r:
+            async with session.post(
+                url, data=data, headers=headers, timeout=REQUEST_TIMEOUT
+            ) as r:
                 res = json.loads(await r.text(encoding="utf-8"))
-        except (aiohttp.ClientError, ValueError) as exception:
+        except (aiohttp.ClientError, TimeoutError, ValueError) as exception:
             _LOGGER.error("Kakao request to %s failed: %s", url, exception)
             return None
         if not isinstance(res, dict):
@@ -402,9 +438,10 @@ class KakaoConfig:
                     API_FRIENDS,
                     params={"offset": offset, "limit": FRIENDS_PAGE_SIZE},
                     headers=self._auth_headers(),
+                    timeout=REQUEST_TIMEOUT,
                 ) as r:
                     res = json.loads(await r.text(encoding="utf-8"))
-            except (aiohttp.ClientError, ValueError) as exception:
+            except (aiohttp.ClientError, TimeoutError, ValueError) as exception:
                 _LOGGER.warning("KakaoTalk [Friends] request failed: %s", exception)
                 return
             if not isinstance(res, dict):
@@ -554,6 +591,15 @@ class KakaoConfig:
         content_type = mimetypes.guess_type(path.name)[0]
         if content_type not in IMAGE_TYPES:
             raise ServiceValidationError("Kakao only accepts JPEG and PNG images.")
+        # Check the size on disk first, so a huge file is never read into memory.
+        try:
+            size = await self.hass.async_add_executor_job(lambda: path.stat().st_size)
+        except OSError as exception:
+            raise HomeAssistantError(
+                f"Could not read the selected image: {exception}"
+            ) from exception
+        if size > MAX_IMAGE_BYTES:
+            raise ServiceValidationError("Kakao only accepts images up to 5 MB.")
         data = await self.hass.async_add_executor_job(path.read_bytes)
         if len(data) > MAX_IMAGE_BYTES:
             raise ServiceValidationError("Kakao only accepts images up to 5 MB.")
@@ -686,6 +732,15 @@ def async_register_services(hass, config):
         having to use the Kakao console. It cannot log anyone in to this integration.
         """
         await _require_admin(call)
+        if not config.has_client_secret:
+            # A friend's one-time code ends up in the address of the page they are sent
+            # back to. Without a client secret, anyone who saw that address could use
+            # the code; with one, the code is useless to them.
+            raise ServiceValidationError(
+                "Friend invites need a Client secret. Turn on Client secret for the "
+                "REST API key in the Kakao Developers console, enter it in the "
+                "KakaoTalk Notifier settings, then run kakao_talk.login again."
+            )
         url = config.invite_url()
         persistent_notification.async_create(
             hass,
@@ -786,36 +841,40 @@ class KakaoTalkView(HomeAssistantView):
         return web.Response(body=content, content_type="text/html", charset="utf-8")
 
     async def get(self, request):
-        if self.config is None:
-            return _plain("KakaoTalk is not set up.", 503)
+        config = self.config
         query = request.rel_url.query
-        # A friend coming back from a friend invite. It changes nothing and reveals
-        # nothing, so it may come from the internet (friends are usually not at home).
+        # A friend coming back from a friend invite. The answer is a fixed text: it
+        # changes nothing, stores nothing and shows nothing from the request.
         is_invite = query.get("state") == INVITE_STATE and (
             "code" in query or "error" in query
         )
-        # Defence in depth: refuse everything else that visibly comes from the internet.
-        if not is_invite and not _is_local_request(self.config.hass, request):
-            _LOGGER.warning(
-                "Blocked non-local request to the KakaoTalk setup page from %s",
-                request.remote,
-            )
+        # Only that answer may be reached from the internet, and only if the owner
+        # set a public address for friend invites. Everything else must be local.
+        allow_remote = is_invite and config is not None and config.invite_is_public
+        if not allow_remote and not _is_local_request(self._hass, request):
+            _log_blocked(request.remote)
             return _plain("Forbidden", 403)
+
+        if config is None:
+            return _plain("KakaoTalk is not set up.", 503)
+
+        if is_invite:
+            # The code is deliberately never exchanged: no token is requested, nothing
+            # is stored and no login happens.
+            if "error" in query:
+                _LOGGER.debug(
+                    "A friend invite was declined or failed: %s",
+                    _clean_for_log(query.get("error"), 60),
+                )
+                return _plain(INVITE_DECLINED)
+            _LOGGER.debug("A friend followed the invite link and gave their permission")
+            return _plain(INVITE_THANKS)
 
         if "error" in query:
             error = _clean_for_log(query.get("error"))
             description = _clean_for_log(query.get("error_description"))
-            # An invite page may be reachable from the internet: do not let strangers
-            # fill the warning log with it.
-            log = _LOGGER.debug if is_invite else _LOGGER.warning
-            log("Kakao login error: %s %s", error, description)
+            _LOGGER.warning("Kakao login error: %s %s", error, description)
             return _plain(f"{error}: {description}")
-
-        if is_invite:
-            # A friend gave their permission through the invite link. The code is
-            # deliberately never exchanged: nothing is stored and no login happens.
-            _LOGGER.debug("A friend followed the invite link and gave their permission")
-            return _plain(INVITE_THANKS)
 
         if "code" in query:
             if not self.config.consume_login_state(query.get("state")):
@@ -835,6 +894,16 @@ class KakaoTalkView(HomeAssistantView):
                 return _plain(error)
             persistent_notification.async_dismiss(
                 self.config.hass, LOGIN_NOTIFICATION_ID
+            )
+            # Make every completed login visible, so an unexpected one is noticed.
+            persistent_notification.async_create(
+                self.config.hass,
+                "A KakaoTalk login was just completed. Messages are now sent as the "
+                "Kakao account that logged in.\n\nIf this was not you, run the "
+                "kakao_talk.login action again to log in with your own account, and "
+                "check who can sign in to Home Assistant.",
+                title="KakaoTalk login completed",
+                notification_id=LOGIN_DONE_NOTIFICATION_ID,
             )
             # Drop the one-time code and state from the address bar and history.
             raise web.HTTPFound(KAKAO_TALK_API_ENDPOINT + "?done=1")
