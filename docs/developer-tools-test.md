@@ -14,7 +14,7 @@ Paste this into **Developer Tools → Template**. Edit the first block, and read
 {# ---- edit these ---- #}
 {% set title   = "Front door" %}
 {% set message = "Someone is at the door at " ~ now().strftime('%H:%M') %}
-{% set photos  = ["https://i.ibb.co/jkbTKZz/hassio.png"] %}
+{% set photos  = ["https://example.com/doorbell.jpg"] %}
 {# -------------------- #}
 
 {%- set body = (title ~ "\n\n" ~ message) if title else message %}
@@ -65,7 +65,7 @@ action: kakao_talk.send_message
 data:
   title: Test image
   message: Image card test
-  url: https://i.ibb.co/jkbTKZz/hassio.png
+  url: https://example.com/doorbell.jpg
 ```
 
 **d) Through the notify service, several images** (one message per image):
@@ -77,8 +77,8 @@ data:
   message: Multiple images
   data:
     photo:
-      - https://i.ibb.co/jkbTKZz/hassio.png
-      - url: http://k.kakaocdn.net/dn/bDgfik/btqwQWk4CRU/P6wNJJiQ3Ko21KNE1TiLw1/kakaolink40_original.png
+      - https://example.com/doorbell.jpg
+      - url: https://example.com/snapshot.png
 ```
 
 **e) Login link** (administrators only):

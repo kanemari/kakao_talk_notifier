@@ -21,7 +21,7 @@ send_message:
       description: >-
         Address of an image, which should be reachable from the internet. When set,
         the message is sent as a card with the image, the title and the message.
-      example: "http://k.kakaocdn.net/dn/bDgfik/btqwQWk4CRU/P6wNJJiQ3Ko21KNE1TiLw1/kakaolink40_original.png"
+      example: "https://example.com/snapshot.png"
       selector:
         text:
     image:

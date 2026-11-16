@@ -45,7 +45,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 COMPONENT_DIR = Path(__file__).parent
-IMAGES_DIR = COMPONENT_DIR / "images"
 SETUP_PAGE = COMPONENT_DIR / "setup.html"
 
 OAUTH_AUTHORIZE_URL = "https://kauth.kakao.com/oauth/authorize"
@@ -600,13 +599,6 @@ class KakaoTalkView(HomeAssistantView):
             return web.Response(status=403, text="Forbidden")
 
         query = request.rel_url.query
-
-        if "image" in query:
-            # Only serve files directly inside the images directory.
-            path = IMAGES_DIR / os.path.basename(query["image"])
-            if not path.is_file():
-                return web.Response(status=404)
-            return web.FileResponse(path)
 
         if "error" in query:
             _LOGGER.warning(
