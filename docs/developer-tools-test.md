@@ -147,6 +147,8 @@ logger:
   fails with an error.
 * `image` uploads a local JPEG/PNG (max 5 MB) to Kakao; `url` is for images already
   public. Use one or the other.
+* `link_to_image` and `link_url` also work in the `data` of `notify.kakao_talk`, and per
+  photo (`photo: [{url: ..., link_url: ...}]`).
 * If there is no valid Kakao login, sending and `list_friends` fail with "Could not sign
   in to KakaoTalk" instead of appearing to succeed. Run `kakao_talk.login` (step e).
 * Mistakes in the call itself (both `url` and `image`, both targets off, an unknown
