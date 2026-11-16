@@ -256,40 +256,80 @@ friends permission); see [Sending to friends](#sending-to-friends).
 Kakao only lets an app message friends one-to-one, and its Message API is meant for
 messages a user sends themselves, not automated ones. Until Kakao approves the
 "Kakao Talk friend list / message" additional feature for a business app, you can still
-use it with a small group of testers:
+use it with a small group of testers. There is a one-time setup, then a short checklist
+for each friend.
+
+### One-time setup (you, the sender)
 
 1. In the Kakao Developers console, under **Kakao Login > Consent items > Personal
    information**, set **Friends list in Kakao services** to *Consent during use*.
-2. Under **App > Member**, invite the sender's and every recipient's Kakao account, by
-   the email they log in to Kakao with. Each recipient then signs in to the Kakao
-   Developers site with that account, creating a developer account if they have none.
-   Your app should then appear in their app list. Kakao may also send an invitation
-   message, but you do not need to wait for it.
-3. The sender and each recipient must be Kakao Talk friends, and recipients must not
-   have a private profile.
-4. Each **recipient** gives their permission once. Run **`kakao_talk.friend_invite_link`**
-   (administrators only) and send the link it shows to the friend. They open it, sign in to
-   Kakao and tap agree on the consent screen. If they are not on your home network, their
-   browser may say the page cannot be loaded afterwards; that is fine, because their
-   permission was recorded before Kakao sent them there. To show them a thank-you page
-   instead, set **Public address for friend invites** under **Configure** to a public
-   `https://` address of your Home Assistant, register that address plus `/api/kakao_talk`
-   as an extra Redirect URI at Kakao, and make sure the path `/api/kakao_talk` is reachable
-   from the internet (Nabu Casa works; behind your own reverse proxy, allow only that path
-   and only GET requests). From the internet the integration answers nothing there except
-   that fixed thank-you text (see [Security](#security)). Friend invites need a **Client
-   secret** to be set. The link cannot log anyone in to
-   this integration, so it is safe to share with the people you invited. Do **not** give
-   recipients a `kakao_talk.login` link: the integration stores a single account, so their
-   login would replace yours. (The older way still works: in the console's **Tools > REST API
-   test**, choose *Retrieve user information*, get a token with the `friends` and
-   `talk_message` scopes, log in as the recipient and accept.)
-5. Turn on **Also send to friends** under **Configure** on the integration, then run `kakao_talk.login` and
-   log in as the sender again, so that Kakao asks for the friends permission.
-6. Run `kakao_talk.list_friends` to see who Kakao returns. An empty list means one of
-   the steps above is not complete for that person.
-7. Set the `friends:` list to choose the recipients. Without it, **every** friend Kakao
-   returns receives every message, so think about what your notifications contain.
+2. Make sure **Client secret** is turned on for your REST API key (it is by default) and
+   that you entered it under **Configure** on the integration. Friend invites need it.
+3. Under **Configure**, turn on **Also send to friends**.
+4. Run `kakao_talk.login` (*Developer tools > Actions*) and log in as yourself, so that
+   Kakao asks for the friends permission. Do this again whenever you change that setting.
+
+### Enrolling each friend
+
+Repeat this for every friend who should receive messages. The friend only has to do steps 2
+and 5.
+
+1. **You: invite their Kakao account.** In the Kakao Developers console, under
+   **App > Member**, invite the friend by the email address they use to log in to Kakao.
+2. **Friend: sign in to Kakao Developers.** They open https://developers.kakao.com/ and
+   sign in with that Kakao account, creating a developer account if they have none. Your
+   app should then appear in their app list. Kakao may also send an invitation message,
+   but they do not need to wait for it.
+3. **Check the basics.** You and the friend must be KakaoTalk friends, and the friend must
+   not have a private profile.
+4. **You: get the invite link.** In Home Assistant go to *Developer tools > Actions* and run
+   **`kakao_talk.friend_invite_link`** (administrators only). A notification shows the link;
+   it is also in the action's response. Send it to the friend, for example in KakaoTalk.
+   It is the same link for every friend and does not expire.
+5. **Friend: open the link and agree.** They open the link, sign in to Kakao and tap agree on
+   the consent screen (friends list and messages). Afterwards they see a thank-you page. If
+   they are not on your home network and you have not set a public address (see below),
+   their browser may say the page cannot be loaded instead; that is fine, because their
+   permission was recorded before Kakao sent them there.
+6. **You: check that they appear.** Run `kakao_talk.list_friends`. The friend's nickname
+   should be in the list. If it is not, one of the steps above is not complete for that
+   person (see [Troubleshooting](#troubleshooting)).
+7. **You: choose who receives messages.** Add them under **Friends to send to** in
+   **Configure** (without any, **every** friend Kakao returns receives every message, so
+   think about what your notifications contain), or name them per message.
+8. **Try it.** For example, a message to that friend only:
+
+   ```yaml
+   action: kakao_talk.send_message
+   data:
+     message: Hello from Home Assistant
+     friends: ["Alice"]
+     send_to_me: false
+   ```
+
+Do **not** give friends a `kakao_talk.login` link: the integration stores a single account, so
+their login would replace yours. The invite link cannot do that; it never logs anyone in. (The
+older way of getting a friend's permission still works: in the console's **Tools > REST API
+test**, choose *Retrieve user information*, get a token with the `friends` and `talk_message`
+scopes, log in as the friend and accept.)
+
+### Friends away from home (optional)
+
+By default Kakao sends a friend back to your local Home Assistant address after they agree,
+which only loads on your home network. To show friends a thank-you page wherever they are:
+
+1. Under **Configure**, set **Public address for friend invites** to a public `https://`
+   address of your Home Assistant (for example your Nabu Casa or own domain address, without
+   a path).
+2. In the Kakao console, register that address plus `/api/kakao_talk` as an extra **Redirect
+   URI** (under *App > Platform Key > REST API key > Redirect URI*). Keep your existing local
+   one.
+3. Make sure `/api/kakao_talk` is reachable from the internet. Nabu Casa works. Behind your own
+   reverse proxy, allow only that exact path and only GET requests, and set
+   `use_x_forwarded_for` and `trusted_proxies` under `http:` in `configuration.yaml`.
+
+From the internet the integration answers nothing there except a fixed thank-you text, and
+only when this setting is filled in. See [Security](#security).
 
 Things to know:
 
