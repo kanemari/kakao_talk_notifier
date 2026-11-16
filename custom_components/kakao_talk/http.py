@@ -100,6 +100,23 @@ def _is_local_request(hass, request):
         return False
 
 
+_LOCAL_IMAGE_HINT = (
+    "Only image files stored in Home Assistant's Local media (Media > My media) "
+    "can be uploaded: copy the image there and pick it again, or use the Image "
+    "URL field with a public address instead."
+)
+
+
+def _media_source_name(media_id):
+    """Human-readable source of a media-source:// id, for error messages."""
+    text = str(media_id or "")
+    if text.startswith("media-source://"):
+        name = text[len("media-source://"):].split("/", 1)[0]
+        if name:
+            return "the '" + name + "' media source"
+    return "a source other than Local media"
+
+
 def _clean_for_log(value, limit=200):
     """Make untrusted text safe to log or show: single line, no control characters."""
     text = "".join(c if c.isprintable() else " " for c in str(value or ""))
@@ -474,11 +491,15 @@ class KakaoConfig:
         try:
             item = await media_source.async_resolve_media(self.hass, media_id, None)
         except Exception as exception:  # media_source raises several types
-            raise HomeAssistantError(f"Could not open image {media_id}: {exception}") from exception
+            raise HomeAssistantError(
+                f"Could not open the selected image ({media_id}): {exception}. "
+                + _LOCAL_IMAGE_HINT
+            ) from exception
         path = getattr(item, "path", None)
         if path is None:
             raise ServiceValidationError(
-                "Only images stored on this Home Assistant (local media) can be uploaded."
+                f"The selected image comes from {_media_source_name(media_id)}, which "
+                "cannot be uploaded to Kakao. " + _LOCAL_IMAGE_HINT
             )
         content_type = mimetypes.guess_type(path.name)[0]
         if content_type not in IMAGE_TYPES:

@@ -141,7 +141,9 @@ actions:
 
 Instead of a public URL you can pick an image from Home Assistant's media (for example
 `/media`). It is uploaded to Kakao, so it need not be reachable from the internet.
-JPEG or PNG, up to 5 MB.
+JPEG or PNG, up to 5 MB. Only files in **Local media** (*Media > My media*) work; images
+from a camera, an add-on or another media source cannot be uploaded, so copy the file
+into My media first, or use a public `url:` instead.
 
 ```yaml
 actions:
