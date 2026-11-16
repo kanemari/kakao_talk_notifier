@@ -419,5 +419,10 @@ def test_every_form_field_has_a_readable_label():
             for key in keys:
                 label = section["data"].get(key, "")
                 assert label and label != key and " " in label, (name, key, label)
-            help_text = section["data_description"]["friend_entities"]
-            assert 0 < len(help_text) <= 120, help_text  # short help text, not a paragraph
+            # every field has a one-line help text of similar length, so the form is evenly spaced
+            lengths = {}
+            for key in keys:
+                help_text = section["data_description"].get(key, "")
+                assert 25 <= len(help_text) <= 75, (name, key, len(help_text), help_text)
+                lengths[key] = len(help_text)
+            assert max(lengths.values()) - min(lengths.values()) <= 40, lengths
