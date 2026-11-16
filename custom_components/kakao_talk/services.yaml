@@ -37,6 +37,24 @@ send_message:
           accept:
             - image/jpeg
             - image/png
+    link_to_image:
+      name: Open the image when tapped
+      description: >-
+        For an image message, make tapping it open the image instead of Home
+        Assistant. Overrides the integration setting. The image's domain must be
+        registered at Kakao (App > Product Link > Web domain); if Kakao refuses the
+        message it is sent again with the normal link.
+      selector:
+        boolean:
+    link_url:
+      name: Link address
+      description: >-
+        Address the message (and its button) opens when tapped, instead of the
+        configured one. Its domain must be registered at Kakao. Takes priority over
+        Open the image when tapped.
+      example: "https://example.com/doorbell"
+      selector:
+        text:
     friends:
       name: Friends
       description: >-

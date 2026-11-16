@@ -63,6 +63,7 @@ saving reloads it. No `notify:` entry is needed, since the integration provides
 | Client secret (`client_secret`) | if enabled | The Client secret of the REST API key. Needed whenever Client secret is enabled in the Kakao console, which is the default. |
 | Home Assistant address (`redirect_uri`) | yes | The local address of Home Assistant, as a full URL starting with `http://` or `https://`, without a path. Kakao sends your browser back to this address plus `/api/kakao_talk` after you log in. |
 | Button link address (`link_url`) | no | The address the button in a message opens. Defaults to the Home Assistant address. Its domain must be registered under *App > Product Link > Web domain*. |
+| Open the image when tapped (`link_to_image`) | no | Off by default. When on, tapping an image message opens the image instead of Home Assistant. See [What a tap opens](#what-a-tap-opens). |
 | Button label (`button_title`) | no | The label of the button in a message. Defaults to `View`. |
 | Also send to friends (`send_to_friends`) | no | Also sends every message to Kakao Talk friends. Off by default. See [Sending to friends](#sending-to-friends). |
 | Friends to send to (`friends`) | no | Nicknames or uuids. When logged in with friends on, **Configure** offers the friends Kakao returns to pick from. Without any, every friend Kakao returns receives every message. |
@@ -152,6 +153,36 @@ actions:
         media_content_type: image/jpeg
 ```
 
+### What a tap opens
+
+Kakao requires every message to carry a link, so tapping a message (or its button) always
+opens something. By default that is the **Button link address** (`link_url`), which
+defaults to your Home Assistant address.
+
+* **Open the image instead:** turn on *Open the image when tapped* under **Configure**,
+  or set `link_to_image: true` on a single message. Tapping an image message then opens
+  the image itself.
+* **Open any address:** set `link_url` on a message, for example a camera page. It takes
+  priority over `link_to_image`.
+
+```yaml
+actions:
+  - action: kakao_talk.send_message
+    data:
+      message: Someone is at the door.
+      url: https://example.com/doorbell.jpg
+      link_to_image: true
+```
+
+Kakao only accepts links on domains you registered under **App > Product Link > Web
+domain**, so register the domain the image is served from. If Kakao refuses the message
+because of the link, the integration sends it once more with the normal link, so you still
+get the notification (the log says so).
+
+An image you upload with `image:` is hosted by Kakao, and Kakao may not accept its address
+as a link. If so, tapping opens the normal link; use `url:` with an address on a domain you
+registered to get the image on tap.
+
 ### Choosing recipients per message
 
 `kakao_talk.send_message` (and `data:` of `notify.kakao_talk`) accept:
@@ -178,7 +209,7 @@ friends permission); see [Sending to friends](#sending-to-friends).
 | Action | What it does |
 |---|---|
 | `notify.kakao_talk` | Sends a notification (see the examples above). Home Assistant shows only its generic fields for `notify` actions, so put `photo`, `friends`, `send_to_friends` and `send_to_me` in the `data` field (YAML). Handy for existing notify setups. |
-| `kakao_talk.send_message` | The same, called directly; the best choice from the UI, since it has a proper form (including the image picker), with the fields `message` (required), `title`, `url`, `image`, `friends`, `send_to_friends` and `send_to_me`. |
+| `kakao_talk.send_message` | The same, called directly; the best choice from the UI, since it has a proper form (including the image picker), with the fields `message` (required), `title`, `url`, `image`, `link_to_image`, `link_url`, `friends`, `send_to_friends` and `send_to_me`. |
 | `kakao_talk.login` | Starts a Kakao login. Administrators only. |
 | `kakao_talk.list_friends` | Returns the nicknames and uuids of the friends Kakao makes available to your app. |
 

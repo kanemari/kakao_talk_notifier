@@ -9,6 +9,8 @@ from homeassistant.components.notify import (
 
 from .const import (
     ATTR_FRIENDS,
+    ATTR_LINK_TO_IMAGE,
+    ATTR_LINK_URL,
     ATTR_PHOTO,
     ATTR_SEND_TO_FRIENDS,
     ATTR_SEND_TO_ME,
@@ -27,7 +29,13 @@ async def async_send_notification(hass, message="", title=None, data=None):
         service_data[ATTR_MESSAGE] = message
 
     if data:
-        for key in (ATTR_FRIENDS, ATTR_SEND_TO_FRIENDS, ATTR_SEND_TO_ME):
+        for key in (
+            ATTR_FRIENDS,
+            ATTR_LINK_TO_IMAGE,
+            ATTR_LINK_URL,
+            ATTR_SEND_TO_FRIENDS,
+            ATTR_SEND_TO_ME,
+        ):
             if key in data:
                 service_data[key] = data[key]
     if data is not None and ATTR_PHOTO in data:
