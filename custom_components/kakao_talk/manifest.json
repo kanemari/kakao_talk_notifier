@@ -1,15 +1,22 @@
 {
   "domain": "kakao_talk",
   "name": "KakaoTalk Notifier",
+  "after_dependencies": [
+    "media_source"
+  ],
+  "codeowners": [
+    "@kanemari"
+  ],
   "config_flow": true,
-  "single_config_entry": true,
-  "codeowners": ["@kanemari"],
-  "dependencies": ["http", "persistent_notification"],
-  "after_dependencies": ["media_source"],
+  "dependencies": [
+    "http",
+    "persistent_notification"
+  ],
   "documentation": "https://github.com/kanemari/kakao_talk_notifier",
   "integration_type": "service",
   "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/kanemari/kakao_talk_notifier/issues",
   "requirements": [],
+  "single_config_entry": true,
   "version": "2026.11.16.2b5"
 }
