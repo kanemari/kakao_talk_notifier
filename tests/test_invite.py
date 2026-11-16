@@ -127,11 +127,113 @@ async def test_real_login_still_works(hass, entry, hass_client, kakao_api):
     assert len(posts(kakao_api, TOKEN_URL)) == 1
 
 
-async def test_non_local_request_with_invite_state_blocked(hass, entry, hass_client, monkeypatch):
+@pytest.fixture
+def from_internet(monkeypatch):
+    """Make every request look like it came from the internet (e.g. Nabu Casa)."""
+    monkeypatch.setattr("custom_components.kakao_talk.http.is_cloud_connection", lambda h: True)
+
+
+async def test_internet_may_reach_only_the_invite_thank_you(hass, entry, hass_client, kakao_api, from_internet):
+    client = await hass_client()
+    resp = await client.get(f"/api/kakao_talk?code=friendcode&state={INVITE_STATE}", allow_redirects=False)
+    assert resp.status == 200
+    assert "permission was recorded" in await resp.text()
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert posts(kakao_api, TOKEN_URL) == []
+
+
+async def test_internet_may_see_a_declined_invite(hass, entry, hass_client, from_internet):
+    client = await hass_client()
+    resp = await client.get(f"/api/kakao_talk?error=access_denied&state={INVITE_STATE}")
+    assert resp.status == 200
+    assert "access_denied" in await resp.text()
+
+
+async def test_internet_still_refused_for_everything_else(hass, entry, hass_client, kakao_api, from_internet):
+    client = await hass_client()
+    for query in (
+        "",  # the setup page
+        "?state=" + INVITE_STATE,  # the marker alone is not enough
+        "?code=x&state=forged",
+        "?code=x",
+        "?error=access_denied",
+        "?error=access_denied&state=forged",
+        "?done=1",
+    ):
+        resp = await client.get("/api/kakao_talk" + query, allow_redirects=False)
+        assert resp.status == 403, query
+    assert posts(kakao_api, TOKEN_URL) == []
+
+
+async def test_internet_cannot_complete_a_real_login(hass, entry, hass_client, kakao_api, monkeypatch):
+    """Even a valid single-use login state is refused when the request is not local."""
+    res = await hass.services.async_call(DOMAIN, "login", blocking=True, return_response=True)
+    state = parse_qs(urlparse(res["url"]).query)["state"][0]
     monkeypatch.setattr("custom_components.kakao_talk.http.is_cloud_connection", lambda h: True)
     client = await hass_client()
-    resp = await client.get(f"/api/kakao_talk?code=x&state={INVITE_STATE}")
+    resp = await client.get(f"/api/kakao_talk?code=thecode&state={state}", allow_redirects=False)
     assert resp.status == 403
+    assert posts(kakao_api, TOKEN_URL) == []
+    # the state was not used up, so the administrator can still finish the login at home
+    monkeypatch.setattr("custom_components.kakao_talk.http.is_cloud_connection", lambda h: False)
+    resp = await client.get(f"/api/kakao_talk?code=thecode&state={state}", allow_redirects=False)
+    assert resp.status == 302
+
+
+async def test_invite_visits_are_not_logged_as_warnings(hass, entry, hass_client, from_internet, caplog):
+    client = await hass_client()
+    await client.get(f"/api/kakao_talk?code=c&state={INVITE_STATE}")
+    await client.get(f"/api/kakao_talk?error=access_denied&state={INVITE_STATE}")
+    ours = [r for r in caplog.records if r.name.startswith("custom_components") and r.levelno >= 30]
+    assert ours == []
+
+
+# ------------------------------------------------------------------ public address setting
+async def _entry_with(hass, **extra):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    e = MockConfigEntry(domain=DOMAIN, data={**CONFIG, **extra}, title="K")
+    e.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(e.entry_id)
+    await hass.async_block_till_done()
+    return e
+
+
+async def test_invite_uses_the_public_address_when_set(hass, kakao_api):
+    await _entry_with(hass, invite_redirect_uri="https://ha.example.com")
+    q = parse_qs(urlparse(await invite(hass)).query)
+    assert q["redirect_uri"] == ["https://ha.example.com/api/kakao_talk"]
+
+
+async def test_login_link_keeps_the_local_address(hass, kakao_api):
+    await _entry_with(hass, invite_redirect_uri="https://ha.example.com")
+    res = await hass.services.async_call(DOMAIN, "login", blocking=True, return_response=True)
+    assert parse_qs(urlparse(res["url"]).query)["redirect_uri"] == ["http://192.168.1.10:8123/api/kakao_talk"]
+
+
+async def test_invite_defaults_to_the_normal_address(hass, entry):
+    q = parse_qs(urlparse(await invite(hass)).query)
+    assert q["redirect_uri"] == ["http://192.168.1.10:8123/api/kakao_talk"]
+
+
+async def test_public_address_is_saved_validated_and_trimmed(hass, entry):
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    bad = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**CONFIG, "invite_redirect_uri": "not a url"}
+    )
+    assert bad["errors"] == {"invite_redirect_uri": "invalid_url"}
+    ok = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**CONFIG, "invite_redirect_uri": " https://ha.example.com/ "}
+    )
+    await hass.async_block_till_done()
+    assert entry.data["invite_redirect_uri"] == "https://ha.example.com"
+
+
+async def test_public_address_left_empty_is_not_stored(hass, entry):
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    await hass.config_entries.options.async_configure(result["flow_id"], {**CONFIG, "invite_redirect_uri": ""})
+    await hass.async_block_till_done()
+    assert "invite_redirect_uri" not in entry.data
 
 
 async def test_decline_shows_kakaos_message(hass, entry, hass_client):

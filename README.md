@@ -74,6 +74,7 @@ saving reloads it. No `notify:` entry is needed, since the integration provides
 | Client secret (`client_secret`) | if enabled | The Client secret of the REST API key. Needed whenever Client secret is enabled in the Kakao console, which is the default. |
 | Home Assistant address (`redirect_uri`) | yes | The local address of Home Assistant, as a full URL starting with `http://` or `https://`, without a path. Kakao sends your browser back to this address plus `/api/kakao_talk` after you log in. |
 | Button link address (`link_url`) | no | The address a tapped message (and its button) opens. Defaults to the Home Assistant address. Its domain must be registered under *App > Product Link > Web domain*. To stop taps opening Home Assistant, see [Avoiding Home Assistant on tap](#avoiding-home-assistant-on-tap). |
+| Public address for friend invites (`invite_redirect_uri`) | no | A public address of Home Assistant (for example your Nabu Casa or own domain address, without a path). Friends are sent back to it after they agree to a [friend invite](#sending-to-friends), so it works away from home. Register it plus `/api/kakao_talk` as a Redirect URI at Kakao. |
 | Open the image when tapped (`link_to_image`) | no | Off by default. When on, tapping an image message opens the image instead of Home Assistant. See [What a tap opens](#what-a-tap-opens). |
 | Button label (`button_title`) | no | The label of the button in a message. Defaults to `View`. |
 | Also send to friends (`send_to_friends`) | no | Also sends every message to Kakao Talk friends. Off by default. See [Sending to friends](#sending-to-friends). |
@@ -270,7 +271,12 @@ use it with a small group of testers:
    (administrators only) and send the link it shows to the friend. They open it, sign in to
    Kakao and tap agree on the consent screen. If they are not on your home network, their
    browser may say the page cannot be loaded afterwards; that is fine, because their
-   permission was recorded before Kakao sent them there. The link cannot log anyone in to
+   permission was recorded before Kakao sent them there. To show them a thank-you page
+   instead, set **Public address for friend invites** under **Configure** to a public
+   address of your Home Assistant, register that address plus `/api/kakao_talk` as an extra
+   Redirect URI at Kakao, and make sure the path `/api/kakao_talk` is reachable from the
+   internet (Nabu Casa works; behind your own reverse proxy, allow only that path). From
+   the internet the integration answers nothing there except that thank-you page. The link cannot log anyone in to
    this integration, so it is safe to share with the people you invited. Do **not** give
    recipients a `kakao_talk.login` link: the integration stores a single account, so their
    login would replace yours. (The older way still works: in the console's **Tools > REST API
@@ -304,7 +310,9 @@ sends your browser back to it. The integration protects the login in two ways:
   action creates a random, single-use code that expires after 10 minutes, and a login
   that does not carry it is refused. The setup page cannot start a login and does not
   reveal your API key.
-* **Requests from the internet are refused**, including Nabu Casa remote access. This is
+* **Requests from the internet are refused**, including Nabu Casa remote access, except
+  the harmless thank-you page that a friend sees after agreeing to a friend invite (it
+  changes nothing and shows nothing). This is
   an extra layer, not the main protection: behind a reverse proxy that hides the
   visitor's address, every request looks local to Home Assistant.
 
@@ -313,7 +321,7 @@ Recommendations:
 * Use a local address as `redirect_uri` and open the login link from your home network.
   Kakao redirects your own browser, so a local address works.
 * If Home Assistant is reachable through a reverse proxy, block the path
-  `/api/kakao_talk` at the proxy. Also set `use_x_forwarded_for` and `trusted_proxies`
+  `/api/kakao_talk` at the proxy (unless you use friend invites away from home, see above). Also set `use_x_forwarded_for` and `trusted_proxies`
   under `http:` in `configuration.yaml`, so that Home Assistant sees the real address of
   each visitor.
 * The login notification is visible to everyone who can sign in to your Home Assistant.
@@ -343,7 +351,7 @@ gave when something fails. To try each feature step by step, follow the
 | Tapping an image does not open the image | *Open the image when tapped* is off, or the image's domain is not registered at Kakao (register `https://k.kakaocdn.net` for picked images). The log says "Sending it again with the normal link" when Kakao refused the link. |
 | "The selected image comes from ... which cannot be uploaded" | Only files in **Local media** (*Media > My media*) can be uploaded. Copy the image there, or use the **Image URL** field. |
 | The **Image** field in the Actions form is greyed out | Needs Home Assistant 2025.7 or newer. |
-| A friend says the page cannot be loaded after accepting the invite | Expected when they are not on your home network. Their permission was recorded before the redirect. Check with `kakao_talk.list_friends`. |
+| A friend says the page cannot be loaded after accepting the invite | Expected when they are not on your home network and no **Public address for friend invites** is set. Their permission was recorded before the redirect; check with `kakao_talk.list_friends`. If you did set it, check that the address plus `/api/kakao_talk` is registered as a Redirect URI at Kakao and reachable from the internet. |
 
 ### Debug logging
 

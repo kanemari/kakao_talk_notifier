@@ -9,6 +9,10 @@
   the friends and message permissions, instead of having to use the Kakao console's REST API
   test. The link cannot start, replace or complete a login. See
   [Sending to friends](README.md#sending-to-friends).
+* **Public address for friend invites** (optional setting): friends away from home are sent
+  back to a public address of your Home Assistant and see a thank-you page, instead of a
+  "page cannot be loaded" error. From the internet only that thank-you page is answered;
+  every other request is still refused.
 
 ## 2026.11.16.3 - 2026-11-16
 

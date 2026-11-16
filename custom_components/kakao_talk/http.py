@@ -37,6 +37,7 @@ from .const import (
     CONF_BUTTON_TITLE,
     CONF_CLIENT_SECRET,
     CONF_FRIENDS,
+    CONF_INVITE_REDIRECT_URI,
     CONF_LINK_TO_IMAGE,
     CONF_LINK_URL,
     CONF_REDIRECT_URI,
@@ -171,6 +172,9 @@ class KakaoConfig:
         self._host = config.get(CONF_REDIRECT_URI)
         # URL that message buttons link to; its domain must be registered at Kakao.
         self._link_url = config.get(CONF_LINK_URL) or self._host
+        # Optional public address friends are sent back to after agreeing, so it works
+        # away from home. Only the thank-you page of a friend invite is served there.
+        self._invite_host = config.get(CONF_INVITE_REDIRECT_URI)
         # Open the image itself (not Home Assistant) when an image message is tapped.
         self._link_to_image = bool(config.get(CONF_LINK_TO_IMAGE))
         self._login_states = {}
@@ -250,6 +254,14 @@ class KakaoConfig:
             }
         )
 
+    def invite_redirect_uri(self):
+        """Where Kakao sends a friend back after they agree.
+
+        The public address for invites if one is set, otherwise the normal address.
+        It must be registered as a Redirect URI at Kakao.
+        """
+        return (self._invite_host or self._host).rstrip("/") + KAKAO_TALK_API_ENDPOINT
+
     def invite_url(self):
         """Kakao consent link to give to a friend, so Kakao records their permission.
 
@@ -261,7 +273,7 @@ class KakaoConfig:
         return OAUTH_AUTHORIZE_URL + "?" + urlencode(
             {
                 "client_id": self._api_key,
-                "redirect_uri": self.redirect_uri(),
+                "redirect_uri": self.invite_redirect_uri(),
                 "response_type": "code",
                 "scope": "talk_message,friends",
                 "state": INVITE_STATE,
@@ -776,26 +788,33 @@ class KakaoTalkView(HomeAssistantView):
     async def get(self, request):
         if self.config is None:
             return _plain("KakaoTalk is not set up.", 503)
-        # Defence in depth: refuse anything that visibly comes from the internet.
-        if not _is_local_request(self.config.hass, request):
+        query = request.rel_url.query
+        # A friend coming back from a friend invite. It changes nothing and reveals
+        # nothing, so it may come from the internet (friends are usually not at home).
+        is_invite = query.get("state") == INVITE_STATE and (
+            "code" in query or "error" in query
+        )
+        # Defence in depth: refuse everything else that visibly comes from the internet.
+        if not is_invite and not _is_local_request(self.config.hass, request):
             _LOGGER.warning(
                 "Blocked non-local request to the KakaoTalk setup page from %s",
                 request.remote,
             )
             return _plain("Forbidden", 403)
 
-        query = request.rel_url.query
-
         if "error" in query:
             error = _clean_for_log(query.get("error"))
             description = _clean_for_log(query.get("error_description"))
-            _LOGGER.warning("Kakao login error: %s %s", error, description)
+            # An invite page may be reachable from the internet: do not let strangers
+            # fill the warning log with it.
+            log = _LOGGER.debug if is_invite else _LOGGER.warning
+            log("Kakao login error: %s %s", error, description)
             return _plain(f"{error}: {description}")
 
-        if "code" in query and query.get("state") == INVITE_STATE:
+        if is_invite:
             # A friend gave their permission through the invite link. The code is
             # deliberately never exchanged: nothing is stored and no login happens.
-            _LOGGER.info("A friend followed the invite link and gave their permission")
+            _LOGGER.debug("A friend followed the invite link and gave their permission")
             return _plain(INVITE_THANKS)
 
         if "code" in query:
