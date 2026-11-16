@@ -313,18 +313,17 @@ async def test_reload_preserves_services(hass, entry):
 
 
 # ------------------------------------------------------------------ hardening
-async def test_error_page_is_plain_text_and_sanitised(hass, entry, hass_client, caplog):
+async def test_error_page_is_themed_and_sanitised(hass, entry, hass_client, caplog):
     client = await hass_client()
     resp = await client.get(
         "/api/kakao_talk",
         params={"error": "denied", "error_description": "a" * 500},
     )
     assert resp.status == 200
-    assert resp.headers["Content-Type"].startswith("text/plain")
+    assert resp.headers["Content-Type"].startswith("text/html")
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     body = await resp.text()
-    assert "\n" not in body
-    assert len(body) < 300  # the description is capped
+    assert "a" * 200 in body and "a" * 201 not in body  # the description is capped
 
 
 async def test_forbidden_and_bad_state_have_nosniff(hass, entry, hass_client, monkeypatch):

@@ -5,37 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KakaoTalk Notifier for Home Assistant</title>
 <style>
+:root {
+	color-scheme: light dark;
+	--bg: #fee500;
+	--card: #ffffff;
+	--ink: #3c1e1e;
+	--text: #3e3f3f;
+	--code: #f3efd0;
+	--shadow: rgba(60, 30, 30, .28);
+}
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #1e1c12;
+		--card: #2b2920;
+		--ink: #fee500;
+		--text: #e8e3c8;
+		--code: #3a3727;
+		--shadow: rgba(0, 0, 0, .5);
+	}
+}
 body {
-	background: #f7f7f7;
+	background: var(--bg);
 	margin: 0;
 	padding: 30px 16px;
-	font-family: helvetica, arial, sans-serif;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
 	font-size: 16px;
-	line-height: 1.5;
-	color: #3e3f3f;
+	line-height: 1.55;
+	color: var(--text);
 }
 article {
-	background: #fff;
-	border: 1px solid #e2e5e8;
-	border-radius: 8px;
-	box-shadow: 0 1px 20px rgba(0, 0, 0, .25);
+	background: var(--card);
+	border-radius: 20px;
+	box-shadow: 0 10px 34px var(--shadow);
 	max-width: 880px;
 	margin: 0 auto;
 	overflow: hidden;
 }
 .content {
-	padding: 20px 40px;
+	padding: 24px 40px 28px;
+}
+.head {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+}
+.icon {
+	width: 64px;
+	height: 64px;
+	flex: none;
 }
 h1 {
-	font-size: 2rem;
+	font-size: 1.8rem;
 	line-height: 1.2;
-	color: #2b2b1b;
-	margin: 0 0 4px;
+	color: var(--ink);
+	margin: 0;
+}
+a {
+	color: var(--ink);
 }
 code {
-	background: #f0f0f0;
-	border-radius: 3px;
-	padding: 1px 4px;
+	background: var(--code);
+	border-radius: 4px;
+	padding: 1px 5px;
 	overflow-wrap: anywhere;
 }
 </style>
@@ -43,7 +74,17 @@ code {
 <body>
 <article>
 	<div class="content">
-		<h1>KakaoTalk Notifier for Home Assistant</h1>
+		<div class="head">
+			<svg class="icon" viewBox="0 0 128 128" role="img" aria-label="KakaoTalk Notifier">
+				<rect width="128" height="128" rx="28" fill="#fee500"/>
+				<g transform="translate(64 61.6) scale(1.22) translate(-64 -61)">
+					<path d="M24 38a14 14 0 0 1 14-14h52a14 14 0 0 1 14 14v36a14 14 0 0 1-14 14H62L42 106V88h-4a14 14 0 0 1-14-14z" fill="#3c1e1e"/>
+					<path d="M64 38 41 58h7v18h12V64h8v12h12V58h7z" fill="#fee500" stroke="#fee500" stroke-width="3" stroke-linejoin="round"/>
+					<circle cx="98" cy="30" r="12" fill="#ff6b5e" stroke="#fee500" stroke-width="5"/>
+				</g>
+			</svg>
+			<h1>KakaoTalk Notifier for Home Assistant</h1>
+		</div>
 
 		<div id="before_login">
 			<p>

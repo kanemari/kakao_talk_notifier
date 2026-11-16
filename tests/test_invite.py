@@ -82,9 +82,9 @@ async def test_callback_thanks_the_friend_and_ignores_the_code(hass, entry, hass
     client = await hass_client()
     resp = await client.get(f"/api/kakao_talk?code=friendcode&state={INVITE_STATE}", allow_redirects=False)
     assert resp.status == 200
-    assert resp.headers["Content-Type"].startswith("text/plain")
+    assert resp.headers["Content-Type"].startswith("text/html")
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
-    assert "permission" in await resp.text()
+    assert "Your permission was recorded" in await resp.text()
     assert posts(kakao_api, TOKEN_URL) == []  # the code is never exchanged
 
 
@@ -164,8 +164,10 @@ async def test_internet_may_reach_only_the_invite_thank_you(hass, public_entry, 
     client = await hass_client()
     resp = await client.get(f"/api/kakao_talk?code=friendcode&state={INVITE_STATE}", allow_redirects=False)
     assert resp.status == 200
-    assert await resp.text() == "Thank you, your permission was recorded. You can close this page."
-    assert resp.headers["Content-Type"].startswith("text/plain")
+    body = await resp.text()
+    assert "<h1>Thank you</h1>" in body
+    assert "Your permission was recorded. You can close this page." in body
+    assert resp.headers["Content-Type"].startswith("text/html")
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert posts(kakao_api, TOKEN_URL) == []
 
@@ -188,7 +190,9 @@ async def test_internet_declined_invite_gets_a_fixed_text(hass, public_entry, ha
     client = await hass_client()
     resp = await client.get(f"/api/kakao_talk?error=access_denied&state={INVITE_STATE}")
     assert resp.status == 200
-    assert (await resp.text()).startswith("The permission was not given.")
+    body = await resp.text()
+    assert "<h1>Permission not given</h1>" in body
+    assert "The permission was not given." in body
 
 
 async def test_internet_duplicate_parameters_cannot_reach_a_login(hass, public_entry, hass_client, kakao_api, monkeypatch):
@@ -373,5 +377,5 @@ async def test_decline_shows_a_fixed_message(hass, entry, hass_client):
     )
     assert resp.status == 200
     text = await resp.text()
-    assert text.startswith("The permission was not given.")
+    assert "The permission was not given." in text
     assert "access_denied" not in text and "cancelled" not in text
