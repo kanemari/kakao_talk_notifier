@@ -1,0 +1,18 @@
+# Minimal config for the dev instance.
+default_config:
+
+logger:
+  default: warning
+  logs:
+    custom_components.kakao_talk: debug
+
+# To test the YAML -> UI migration, uncomment this and restart:
+# kakao_talk:
+#   api_key: YOUR_REST_API_KEY
+#   client_secret: YOUR_CLIENT_SECRET
+#   redirect_uri: http://localhost:8123
+#   send_to_friends: true
+#   friends: ["Alice"]
+# notify:
+#   - platform: kakao_talk
+#     name: kakao_talk
