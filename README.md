@@ -112,7 +112,7 @@ Your login is kept: the `kakao.session` file is unchanged.
 
 Messages are sent as the account that logged in. To switch accounts, or after turning on
 `send_to_friends`, run `kakao_talk.login` again. After a login the Home Assistant log
-shows which permissions Kakao granted (search the log for "granted scopes").
+shows which permissions Kakao granted in the "KakaoTalk login completed" notification.
 
 Opening `<redirect_uri>/api/kakao_talk` in a browser shows a short setup page. A login
 cannot be started from that page.
@@ -371,6 +371,11 @@ only when this setting is filled in. See [Security](#security).
 
 Things to know:
 
+* Kakao returns a friend only if they are linked to your app **and** agreed to the "Provide friends
+  list in Kakao Service" permission when they linked. It leaves out anyone who set *Show my profile
+  on Friends list* to *Disagree* or revoked that consent. A friend who agreed only to the message
+  permission is not returned.
+* Kakao caches the friends list for about 10 minutes, so a change can take that long to show.
 * Before approval, an app can send 30 messages per day in total. The integration logs
   delivery failures, including the daily limit.
 * Kakao accepts at most 5 recipients per request. The integration splits larger lists
@@ -476,7 +481,7 @@ gave when something fails. To try each feature step by step, follow the
 | Messages arrive but with no notification | Expected for messages to yourself. |
 | No friends in the **Targets** list of `kakao_talk.send_message` | **Also send to friends** must be on, you must be logged in with the friends permission, and Kakao must return them: run `kakao_talk.list_friends`. They then appear within seconds (otherwise within an hour). |
 | `kakao_talk.list_friends` shows an error such as "Kakao error -402" | Kakao refused the request; the message says why. Usually your login lacks the friends permission: turn on **Also send to friends**, run `kakao_talk.login` and agree to it. |
-| `kakao_talk.list_friends` returns an empty list with a note | Kakao answered but returned nobody: each friend must be invited under **App > Member**, have signed in to Kakao Developers, and have agreed through the friend invite link. See [Sending to friends](#sending-to-friends). |
+| `kakao_talk.list_friends` returns an empty list with a note | Kakao answered but returned nobody. Each friend must be linked to your app and have agreed to the friends-list permission (see [Sending to friends](#sending-to-friends)). Check the "KakaoTalk login completed" notification of your last login: if it does not list *friends* among the granted permissions, run `kakao_talk.login` again. If it lists a login you did not do, the integration may be logged in as someone else. |
 | Tapping a message opens Home Assistant | That is the default link. Set **Button link address** to a harmless page on a registered domain, see [Avoiding Home Assistant on tap](#avoiding-home-assistant-on-tap). Turn on [debug logging](#debug-logging) and check the `link=` in the log. |
 | Tapping an image does not open the image | *Open the image when tapped* is off, or the image's domain is not registered at Kakao (register `https://k.kakaocdn.net` for picked images). The log says "Sending it again with the normal link" when Kakao refused the link. |
 | "The selected image comes from ... which cannot be uploaded" | Only files in **Local media** (*Media > My media*) can be uploaded. Copy the image there, or use the **Image URL** field. |

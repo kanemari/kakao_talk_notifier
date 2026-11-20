@@ -447,6 +447,21 @@ class KakaoConfig:
             self.hass.async_create_task(self._async_friends_after_login())
         return res
 
+    def granted_permissions_text(self, token_response):
+        """What Kakao says the login was granted, in words, for the notification."""
+        scopes = str(token_response.get("scope") or "").replace(",", " ").split()
+        if not scopes:
+            text = "Kakao did not report which permissions were granted."
+        else:
+            text = "Permissions granted: " + ", ".join(scopes) + "."
+        if self._send_to_friends and scopes and "friends" not in scopes:
+            text += (
+                " The friends permission was NOT granted, so friends cannot be listed. "
+                "Check that Friends list in Kakao services is set to Consent during use "
+                "in the Kakao console, then run kakao_talk.login again."
+            )
+        return text
+
     async def _async_refresh_access_token(self):
         """Refresh the access token. Returns True on success."""
         if not self._refresh_token:
@@ -1086,7 +1101,9 @@ class KakaoTalkView(HomeAssistantView):
             persistent_notification.async_create(
                 self.config.hass,
                 "A KakaoTalk login was just completed. Messages are now sent as the "
-                "Kakao account that logged in.\n\nIf this was not you, run the "
+                "Kakao account that logged in.\n\n"
+                + self.config.granted_permissions_text(res)
+                + "\n\nIf this was not you, run the "
                 "kakao_talk.login action again to log in with your own account, and "
                 "check who can sign in to Home Assistant.",
                 title="KakaoTalk login completed",
