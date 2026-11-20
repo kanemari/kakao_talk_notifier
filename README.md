@@ -475,7 +475,8 @@ gave when something fails. To try each feature step by step, follow the
 | The login fails with a client secret error | Set `client_secret`, or check that it is current. |
 | Messages arrive but with no notification | Expected for messages to yourself. |
 | No friends in the **Targets** list of `kakao_talk.send_message` | **Also send to friends** must be on, you must be logged in with the friends permission, and Kakao must return them: run `kakao_talk.list_friends`. They then appear within seconds (otherwise within an hour). |
-| `kakao_talk.list_friends` returns nothing | See the steps in [Sending to friends](#sending-to-friends). |
+| `kakao_talk.list_friends` shows an error such as "Kakao error -402" | Kakao refused the request; the message says why. Usually your login lacks the friends permission: turn on **Also send to friends**, run `kakao_talk.login` and agree to it. |
+| `kakao_talk.list_friends` returns an empty list with a note | Kakao answered but returned nobody: each friend must be invited under **App > Member**, have signed in to Kakao Developers, and have agreed through the friend invite link. See [Sending to friends](#sending-to-friends). |
 | Tapping a message opens Home Assistant | That is the default link. Set **Button link address** to a harmless page on a registered domain, see [Avoiding Home Assistant on tap](#avoiding-home-assistant-on-tap). Turn on [debug logging](#debug-logging) and check the `link=` in the log. |
 | Tapping an image does not open the image | *Open the image when tapped* is off, or the image's domain is not registered at Kakao (register `https://k.kakaocdn.net` for picked images). The log says "Sending it again with the normal link" when Kakao refused the link. |
 | "The selected image comes from ... which cannot be uploaded" | Only files in **Local media** (*Media > My media*) can be uploaded. Copy the image there, or use the **Image URL** field. |

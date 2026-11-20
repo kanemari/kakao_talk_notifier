@@ -370,8 +370,8 @@ async def test_non_object_friends_response_is_handled(hass, entry, aioclient_moc
     aioclient_mock.clear_requests()
     aioclient_mock.post(TOKEN_URL, json={"access_token": "at"})
     aioclient_mock.get(FRIENDS_URL, json=["nope"])
-    res = await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
-    assert res["friends"] == []
+    with pytest.raises(HomeAssistantError, match="unexpected reply"):
+        await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
 
 
 async def test_secrets_not_logged(hass, entry, caplog, hass_client, kakao_api):
