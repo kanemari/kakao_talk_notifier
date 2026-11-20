@@ -29,6 +29,11 @@
 
 ### Changed
 
+* **`kakao_talk.list_friends`** now says why when Kakao refuses the request (for example a missing
+  permission), instead of returning an empty list that looks like "no friends". When Kakao answers
+  but returns nobody, the response carries a note listing what each friend must have done.
+* The **"KakaoTalk login completed"** notification now lists the permissions Kakao granted (and warns if
+  the friends permission is missing), instead of only logging them where they are normally hidden.
 * **Settings form**: every field now has a one-line help text of similar length, in both the setup and
   **Configure** forms, so the fields are evenly spaced. Longer explanations are in the README.
 

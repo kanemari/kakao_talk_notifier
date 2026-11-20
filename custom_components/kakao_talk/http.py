@@ -120,6 +120,18 @@ def _log_blocked(remote):
     else:
         _LOGGER.debug("Blocked non-local request to the KakaoTalk page from %s", remote)
 
+_FRIENDS_HINT = (
+    "If it mentions a missing permission, turn on Also send to friends in the settings, "
+    "run kakao_talk.login and agree to the friends permission. The Home Assistant log has "
+    "Kakao's full reply."
+)
+_NO_FRIENDS_NOTE = (
+    "Kakao returned no friends. Each friend must be invited under App > Member in the "
+    "Kakao Developers console, have signed in there, and have agreed to the friends "
+    "permission (send them the kakao_talk.friend_invite_link link). You must be logged "
+    "in with the friends permission: turn on Also send to friends, then run kakao_talk.login."
+)
+
 _LOGIN_REQUIRED = (
     "Could not sign in to KakaoTalk. Run the kakao_talk.login action to log in "
     "again; the Home Assistant log has the details."
@@ -235,6 +247,8 @@ class KakaoConfig:
         self._friend_filter = [str(f).strip().lower() for f in config.get(CONF_FRIENDS) or []]
         self._friends = []  # list of {"uuid": ..., "nickname": ...}
         self._friends_fetched = 0.0
+        # Why the last fetch of the friends list failed, or None if it worked.
+        self._friends_error = None
         self._access_token = None
         self._refresh_token = None
 
@@ -433,6 +447,21 @@ class KakaoConfig:
             self.hass.async_create_task(self._async_friends_after_login())
         return res
 
+    def granted_permissions_text(self, token_response):
+        """What Kakao says the login was granted, in words, for the notification."""
+        scopes = str(token_response.get("scope") or "").replace(",", " ").split()
+        if not scopes:
+            text = "Kakao did not report which permissions were granted."
+        else:
+            text = "Permissions granted: " + ", ".join(scopes) + "."
+        if self._send_to_friends and scopes and "friends" not in scopes:
+            text += (
+                " The friends permission was NOT granted, so friends cannot be listed. "
+                "Check that Friends list in Kakao services is set to Consent during use "
+                "in the Kakao console, then run kakao_talk.login again."
+            )
+        return text
+
     async def _async_refresh_access_token(self):
         """Refresh the access token. Returns True on success."""
         if not self._refresh_token:
@@ -501,6 +530,10 @@ class KakaoConfig:
         return res
 
     async def _async_get_friends(self):
+        """Fetch the friends list. True if it worked; False (and _friends_error says why) if not.
+
+        A failed fetch leaves the friends we already know unchanged.
+        """
         friends = []
         offset = 0
         session = async_get_clientsession(self.hass)
@@ -515,13 +548,18 @@ class KakaoConfig:
                     res = json.loads(await r.text(encoding="utf-8"))
             except (aiohttp.ClientError, TimeoutError, ValueError) as exception:
                 _LOGGER.warning("KakaoTalk [Friends] request failed: %s", exception)
-                return
+                self._friends_error = f"the request failed ({exception})"
+                return False
             if not isinstance(res, dict):
                 _LOGGER.warning("KakaoTalk [Friends] returned an unexpected response")
-                return
+                self._friends_error = "Kakao sent an unexpected reply"
+                return False
             if "code" in res:
                 _LOGGER.warning("KakaoTalk [Friends] Error : %s", res)
-                return
+                self._friends_error = "Kakao error {}: {}".format(
+                    res.get("code"), _clean_for_log(res.get("msg"), 120)
+                )
+                return False
             elements = res.get("elements", [])
             friends.extend(
                 {"uuid": f["uuid"], "nickname": f.get("profile_nickname", "")}
@@ -533,6 +571,7 @@ class KakaoConfig:
                 break
         self._friends = friends
         self._friends_fetched = time.monotonic()
+        self._friends_error = None
         _LOGGER.debug("KakaoTalk [Friends] %d friends", len(friends))
         self._notify_friends_changed()
         if not friends:
@@ -541,6 +580,7 @@ class KakaoConfig:
                 "friends who are also app members and have consented to 'friends' and "
                 "'talk_message' are returned (see the README)."
             )
+        return True
 
     @property
     def friend_entities_enabled(self):
@@ -555,7 +595,12 @@ class KakaoConfig:
         """Fetch (fresh) and return the friends Kakao makes available to the app."""
         if not await self._async_refresh_access_token():
             raise HomeAssistantError(_LOGIN_REQUIRED)
-        await self._async_get_friends()
+        if not await self._async_get_friends():
+            # Say why, rather than returning an empty list that looks like "no friends".
+            raise HomeAssistantError(
+                f"Kakao could not return the friends list: {self._friends_error}. "
+                + _FRIENDS_HINT
+            )
         return list(self._friends)
 
     def _recipient_uuids(self, requested=None):
@@ -845,6 +890,8 @@ def async_register_services(hass, config):
     async def list_friends_handler(call: ServiceCall):
         """Return the friends (nickname + uuid) Kakao makes available to the app."""
         friends = await config.async_list_friends()
+        if not friends:
+            return {"friends": [], "note": _NO_FRIENDS_NOTE}
         return {"friends": friends}
 
     async def _require_admin(call: ServiceCall):
@@ -1054,7 +1101,9 @@ class KakaoTalkView(HomeAssistantView):
             persistent_notification.async_create(
                 self.config.hass,
                 "A KakaoTalk login was just completed. Messages are now sent as the "
-                "Kakao account that logged in.\n\nIf this was not you, run the "
+                "Kakao account that logged in.\n\n"
+                + self.config.granted_permissions_text(res)
+                + "\n\nIf this was not you, run the "
                 "kakao_talk.login action again to log in with your own account, and "
                 "check who can sign in to Home Assistant.",
                 title="KakaoTalk login completed",

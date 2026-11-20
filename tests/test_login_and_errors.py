@@ -370,8 +370,8 @@ async def test_non_object_friends_response_is_handled(hass, entry, aioclient_moc
     aioclient_mock.clear_requests()
     aioclient_mock.post(TOKEN_URL, json={"access_token": "at"})
     aioclient_mock.get(FRIENDS_URL, json=["nope"])
-    res = await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
-    assert res["friends"] == []
+    with pytest.raises(HomeAssistantError, match="unexpected reply"):
+        await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
 
 
 async def test_secrets_not_logged(hass, entry, caplog, hass_client, kakao_api):
@@ -442,3 +442,51 @@ def test_media_source_name():
     assert _media_source_name("media-source://camera/abc") == "the 'camera' media source"
     assert _media_source_name("/api/image.jpg") == "a source other than Local media"
     assert _media_source_name(None) == "a source other than Local media"
+
+
+# ------------------------------------------------------------------ granted permissions are shown
+async def _login_and_capture(hass, entry, hass_client, aioclient_mock, monkeypatch, token_json):
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(TOKEN_URL, json=token_json)
+    from .conftest import FRIENDS_URL
+
+    aioclient_mock.get(FRIENDS_URL, json={"total_count": 0, "elements": []})
+    created = {}
+    monkeypatch.setattr(
+        "custom_components.kakao_talk.http.persistent_notification.async_create",
+        lambda h, msg, **kw: created.__setitem__(kw.get("notification_id"), msg),
+    )
+    res = await hass.services.async_call(DOMAIN, "login", blocking=True, return_response=True)
+    state = parse_qs(urlparse(res["url"]).query)["state"][0]
+    client = await hass_client()
+    resp = await client.get(f"/api/kakao_talk?code=thecode&state={state}", allow_redirects=False)
+    assert resp.status == 302
+    await hass.async_block_till_done()
+    return created["kakao_talk_login_done"]
+
+
+async def test_login_notification_lists_the_granted_permissions(hass, entry, hass_client, aioclient_mock, monkeypatch):
+    text = await _login_and_capture(
+        hass, entry, hass_client, aioclient_mock, monkeypatch,
+        {"access_token": "at", "refresh_token": "rt", "scope": "talk_message friends"},
+    )
+    assert "Permissions granted: talk_message, friends." in text
+    assert "NOT granted" not in text
+
+
+async def test_login_notification_warns_when_friends_is_missing(hass, entry, hass_client, aioclient_mock, monkeypatch):
+    text = await _login_and_capture(
+        hass, entry, hass_client, aioclient_mock, monkeypatch,
+        {"access_token": "at", "refresh_token": "rt", "scope": "talk_message"},
+    )
+    assert "Permissions granted: talk_message." in text
+    assert "friends permission was NOT granted" in text and "Consent during use" in text
+
+
+async def test_login_notification_when_kakao_reports_nothing(hass, entry, hass_client, aioclient_mock, monkeypatch):
+    text = await _login_and_capture(
+        hass, entry, hass_client, aioclient_mock, monkeypatch,
+        {"access_token": "at", "refresh_token": "rt"},
+    )
+    assert "did not report which permissions" in text
+    assert "NOT granted" not in text  # it cannot tell, so it does not claim friends is missing

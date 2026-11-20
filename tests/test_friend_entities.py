@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
@@ -426,3 +426,65 @@ def test_every_form_field_has_a_readable_label():
                 assert 25 <= len(help_text) <= 75, (name, key, len(help_text), help_text)
                 lengths[key] = len(help_text)
             assert max(lengths.values()) - min(lengths.values()) <= 40, lengths
+
+
+# ------------------------------------------------------------------ list_friends says why
+async def test_list_friends_explains_a_kakao_error(hass, entry, aioclient_mock):
+    mock_friends(aioclient_mock, [])
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(TOKEN_URL, json={"access_token": "at", "refresh_token": "rt"})
+    aioclient_mock.get(FRIENDS_URL, json={"code": -402, "msg": "this API requires the friends scope"})
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
+    text = str(err.value)
+    assert "-402" in text and "friends scope" in text
+    assert "Also send to friends" in text and "kakao_talk.login" in text
+
+
+async def test_list_friends_explains_a_network_failure(hass, entry, aioclient_mock):
+    import aiohttp
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(TOKEN_URL, json={"access_token": "at", "refresh_token": "rt"})
+    aioclient_mock.get(FRIENDS_URL, exc=aiohttp.ClientError("boom"))
+    with pytest.raises(HomeAssistantError, match="the request failed"):
+        await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
+
+
+async def test_list_friends_with_nobody_returns_a_helpful_note(hass, entry, aioclient_mock):
+    mock_friends(aioclient_mock, [])
+    res = await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
+    assert res["friends"] == []
+    assert "App > Member" in res["note"] and "friend_invite_link" in res["note"]
+
+
+async def test_list_friends_with_friends_has_no_note(hass, entry):
+    res = await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
+    assert [f["nickname"] for f in res["friends"]] == ["Alice", "Bob"]
+    assert "note" not in res
+
+
+async def test_a_failed_refresh_keeps_the_friends_and_entities(hass, entry, aioclient_mock):
+    await list_friends(hass)
+    before = {e.entity_id for e in friend_entities(hass)}
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(TOKEN_URL, json={"access_token": "at", "refresh_token": "rt"})
+    aioclient_mock.get(FRIENDS_URL, json={"code": -402, "msg": "no scope"})
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(DOMAIN, "list_friends", blocking=True, return_response=True)
+    await hass.async_block_till_done()
+    assert {e.entity_id for e in friend_entities(hass)} == before
+    for entity_id in before:
+        assert hass.states.get(entity_id).state != "unavailable"  # an error is not "the friend left"
+    assert [f["nickname"] for f in hass.data[DOMAIN]["config"]._friends] == ["Alice", "Bob"]
+
+
+async def test_sending_still_works_when_the_friends_call_fails(hass, entry, aioclient_mock):
+    """Only list_friends raises; a message to yourself is still sent."""
+    aioclient_mock.clear_requests()
+    aioclient_mock.post(TOKEN_URL, json={"access_token": "at", "refresh_token": "rt"})
+    aioclient_mock.post(MEMO_URL, json={"result_code": 0})
+    aioclient_mock.get(FRIENDS_URL, json={"code": -402, "msg": "no scope"})
+    hass.data[DOMAIN]["config"]._friends = []
+    await hass.services.async_call(DOMAIN, "send_message", {"message": "hi"}, blocking=True)
+    assert len(posts(aioclient_mock, MEMO_URL)) == 1
