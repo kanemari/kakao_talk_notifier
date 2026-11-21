@@ -6,7 +6,7 @@ import secrets
 import time
 from ipaddress import ip_address
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import aiohttp
 import voluptuous as vol
@@ -364,8 +364,17 @@ class KakaoConfig:
 
     @property
     def invite_is_public(self):
-        """True if friends may come back from an invite over the internet."""
-        return bool(self._invite_host)
+        """True if friends may come back to *this Home Assistant* from the internet.
+
+        Only when the landing page setting is a bare address of Home Assistant itself.
+        If it is a hosted page (it has a path), Home Assistant answers nothing from the
+        internet at all.
+        """
+        return bool(self._invite_host) and not urlsplit(self._invite_host).path.strip("/")
+
+    @property
+    def invite_uses_hosted_page(self):
+        return bool(self._invite_host) and not self.invite_is_public
 
     @property
     def has_client_secret(self):
@@ -377,6 +386,8 @@ class KakaoConfig:
         The public address for invites if one is set, otherwise the normal address.
         It must be registered as a Redirect URI at Kakao.
         """
+        if self._invite_host and not self.invite_is_public:
+            return self._invite_host  # a hosted page: used exactly as entered
         return (self._invite_host or self._host).rstrip("/") + KAKAO_TALK_API_ENDPOINT
 
     def invite_url(self):
@@ -1038,8 +1049,8 @@ class KakaoTalkView(HomeAssistantView):
         is_invite = query.get("state") == INVITE_STATE and (
             "code" in query or "error" in query
         )
-        # Only that answer may be reached from the internet, and only if the owner
-        # set a public address for friend invites. Everything else must be local.
+        # Only that answer may be reached from the internet, and only if the owner uses a
+        # bare address of this Home Assistant as the landing page. Everything else must be local.
         allow_remote = is_invite and config is not None and config.invite_is_public
         if not allow_remote and not _is_local_request(self._hass, request):
             _log_blocked(request.remote)
