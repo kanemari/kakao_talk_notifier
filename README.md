@@ -320,8 +320,11 @@ and 5.
    not have a private profile.
 4. **You: get the invite link.** In Home Assistant go to *Developer tools > Actions* and run
    **`kakao_talk.friend_invite_link`** (administrators only). A notification shows the link;
-   it is also in the action's response. Send it to the friend, for example in KakaoTalk.
-   It is the same link for every friend and does not expire.
+   it is also in the action's response. The notification also shows the **Redirect URI to
+   register at Kakao** and a **message you can send to the friend**, with the link to sign
+   up to Kakao Developers (https://developers.kakao.com/), the invite link and, with the
+   hosted page, a request to send you their code. The link is the same for every friend and
+   does not expire.
 5. **Friend: open the link and agree.** They open the link, sign in to Kakao and tap agree on
    the consent screen (friends list and messages). What they see next depends on your
    **Friend invite landing page** setting (see [Friends away from home](#friends-away-from-home-optional)):

@@ -270,3 +270,44 @@ async def test_the_invite_link_and_the_action_use_the_same_redirect(hass, kakao_
     sent = parse_qs(urlparse(invite["url"]).query)["redirect_uri"][0]
     await link(hass)
     assert exchanges(kakao_api)[0]["redirect_uri"] == sent == HOSTED
+
+
+# ------------------------------------------------------------------ the message for the friend
+async def invite_response(hass):
+    return await hass.services.async_call(DOMAIN, "friend_invite_link", blocking=True, return_response=True)
+
+
+async def test_the_invite_gives_the_redirect_to_register_and_a_message_for_the_friend(hass, entry):
+    res = await invite_response(hass)
+    assert res["redirect_uri"] == LOCAL_REDIRECT
+    lines = res["message"].splitlines()
+    assert lines[0].startswith("Hi!")
+    assert lines[1].startswith("1.") and "https://developers.kakao.com/" in lines[1]
+    assert lines[2].startswith("2.") and res["url"] in lines[2]
+    assert len(lines) == 3  # no "send me the code" step: there is no hosted page to show one
+    assert "secret" not in res["message"].lower()  # only the public link, never your Client secret
+
+
+async def test_with_a_hosted_page_the_message_asks_for_the_code(hass, kakao_api):
+    await hosted_entry(hass)
+    res = await invite_response(hass)
+    assert res["redirect_uri"] == HOSTED
+    lines = res["message"].splitlines()
+    assert len(lines) == 4 and lines[3].startswith("3.") and "code" in lines[3]
+
+
+async def test_the_notification_shows_the_link_the_redirect_and_the_message(hass, kakao_api, monkeypatch):
+    seen = capture_notifications(monkeypatch)
+    await hosted_entry(hass)
+    res = await invite_response(hass)
+    text = seen["kakao_talk_friend_invite"]
+    assert res["url"] in text and "`" + HOSTED + "`" in text and res["message"] in text
+    assert "Register this Redirect URI" in text and "kakao_talk.link_friend" in text
+
+
+async def test_without_a_hosted_page_the_notification_has_no_code_step(hass, entry, monkeypatch):
+    seen = capture_notifications(monkeypatch)
+    await invite_response(hass)
+    text = seen["kakao_talk_friend_invite"]
+    assert "Register this Redirect URI" in text and "`" + LOCAL_REDIRECT + "`" in text
+    assert "link_friend" not in text
