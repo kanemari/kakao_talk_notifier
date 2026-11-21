@@ -54,3 +54,14 @@ Open http://localhost:8123, finish onboarding, then:
    entry for kakao_talk (or the whole `dev/config` folder), uncomment the `kakao_talk:` block
    in `dev/config/configuration.yaml`, and start again. The settings should appear in the UI
    and a repair notice should ask you to remove the YAML.
+
+## The hosted landing page
+
+Friends are sent to `docs/invite-done.html` after they agree to a friend invite. It is generated
+from `custom_components/kakao_talk/pages.py` (`python dev/build_landing_page.py`; a test fails if
+the file is out of date) and **served from the `gh-pages` branch**, which holds only that file.
+Pushing to `main` does not change the live page. To publish a change, run:
+
+```bash
+bash dev/publish_landing_page.sh
+```

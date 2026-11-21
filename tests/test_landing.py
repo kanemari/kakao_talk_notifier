@@ -160,3 +160,14 @@ def test_the_setting_is_labelled_for_what_it_is():
         data = json.loads((base / name).read_text(encoding="utf-8"))
         for section in (data["config"]["step"]["user"], data["options"]["step"]["init"]):
             assert section["data"]["invite_redirect_uri"] == "Friend invite landing page"
+
+
+
+def test_the_publish_script_puts_only_the_page_on_the_gh_pages_branch():
+    script = (ROOT / "dev" / "publish_landing_page.sh").read_text(encoding="utf-8")
+    assert "gh-pages" in script
+    copied = re.findall(r"^cp .*$", script, re.M)
+    assert copied == ['cp "$ROOT/docs/invite-done.html" invite-done.html']
+    assert ": > .nojekyll" in script
+    assert "git rm -rq" in script  # everything else on the branch is removed first
+    assert "push -q origin gh-pages" in script and "origin main" not in script
