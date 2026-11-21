@@ -107,4 +107,4 @@ friend_invite_link:
     console. Administrators only. Creates a notification with the link, which
     cannot log anyone in to this integration. The friend must already be invited
     under App > Member in the Kakao Developers console. For friends away from
-    home, set a public address for friend invites in the integration settings.
+    home, set a friend invite landing page in the integration settings.

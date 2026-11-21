@@ -1,5 +1,6 @@
 """Config flow: set up and change KakaoTalk from the UI, and import configuration.yaml."""
 import logging
+from urllib.parse import urlsplit
 from typing import Any, Dict, Optional
 
 import voluptuous as vol
@@ -111,6 +112,10 @@ def _validate(data: Dict[str, Any]) -> Dict[str, str]:
             except vol.Invalid:
                 errors[key] = "invalid_url"
     public = data.get(CONF_INVITE_REDIRECT_URI)
+    if public and CONF_INVITE_REDIRECT_URI not in errors:
+        parts = urlsplit(public)
+        if parts.query or parts.fragment:
+            errors[CONF_INVITE_REDIRECT_URI] = "invalid_url"
     if public and CONF_INVITE_REDIRECT_URI not in errors and not public.lower().startswith("https://"):
         # A friend's one-time code travels in this address over the internet.
         errors[CONF_INVITE_REDIRECT_URI] = "https_required"

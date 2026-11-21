@@ -46,6 +46,7 @@ main{background:var(--card);border-radius:26px;max-width:420px;width:100%;paddin
 .badge path{stroke:var(--card)}
 h1{font-size:1.55rem;line-height:1.25;margin:12px 0 8px}
 p{margin:0;color:var(--muted);overflow-wrap:anywhere}
+[hidden]{display:none!important}
 .brand{margin-top:26px;font-size:.78rem;letter-spacing:.05em;color:var(--muted);opacity:.85}
 """
 
@@ -93,6 +94,74 @@ def csp_for(document):
             "form-action 'none'",
             "frame-ancestors 'none'",
         )
+    )
+
+
+# The static landing page for friends (hosted on GitHub Pages, see docs/invite-done.html).
+# Kakao sends a friend there after they agree: ?code=... and ?error=... say which. The
+# script only chooses which of three fixed blocks to show, then removes the query from
+# the address, so nothing from the address is ever put on the page.
+LANDING_SCRIPT = (
+    "var q=location.search,"
+    "s=/[?&]error=/.test(q)?'declined':/[?&]code=/.test(q)?'ok':'neutral';"
+    "['neutral','ok','declined'].forEach(function(i){"
+    "document.getElementById(i).hidden=i!==s});"
+    "history.replaceState(null,'',location.pathname)"
+)
+LANDING_TEXT = {
+    "ok": ("Thank you", "Your permission was recorded. You can close this page."),
+    "declined": (
+        "Permissions not accepted",
+        "Permissions were not accepted. If you want to try again, ask the person who "
+        "invited you for the link and open it once more.",
+    ),
+    "neutral": (
+        "KakaoTalk Notifier",
+        "This is the page friends see after they agree in Kakao. There is nothing to do here.",
+    ),
+}
+
+
+def landing_csp():
+    """The policy for the static page, as a <meta> tag (a static host cannot set headers)."""
+    return "; ".join(
+        (
+            "default-src 'none'",
+            "style-src " + _hash(STYLE),
+            "script-src " + _hash(LANDING_SCRIPT),
+            "img-src 'none'",
+            "base-uri 'none'",
+            "form-action 'none'",
+        )
+    )
+
+
+def render_landing():
+    """The static landing page for friends: three fixed blocks, one of which the script shows."""
+
+    def block(name, badge):
+        title, message = LANDING_TEXT[name]
+        hidden = "" if name == "neutral" else " hidden"
+        return (
+            f'<section id="{name}"{hidden}>{badge}'
+            f"<h1>{html.escape(title, quote=True)}</h1>"
+            f"<p>{html.escape(message, quote=True)}</p></section>"
+        )
+
+    return (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<meta name="robots" content="noindex,nofollow">'
+        '<meta name="referrer" content="no-referrer">'
+        f'<meta http-equiv="Content-Security-Policy" content="{landing_csp()}">'
+        "<title>KakaoTalk Notifier</title>"
+        "<style>" + STYLE + "</style></head><body><main>"
+        + ICON
+        + block("neutral", "")
+        + block("ok", BADGE_OK)
+        + block("declined", BADGE_PROBLEM)
+        + '<div class="brand">KakaoTalk Notifier</div>'
+        "</main><script>" + LANDING_SCRIPT + "</script></body></html>\n"
     )
 
 

@@ -15,11 +15,10 @@
   can target them too. Friends who leave become unavailable. The typed `friends` field still
   works. Turn it off with **Create friends as entities** in the settings if you do not want
   friends stored as entities. See [Picking friends by name](README.md#picking-friends-by-name).
-* **Public address for friend invites** (optional setting): friends away from home are sent
-  back to a public address of your Home Assistant and see a thank-you page, instead of a
-  "page cannot be loaded" error. It must be an `https://` address. From the internet only
-  that fixed thank-you text is answered, and only when this setting is filled in; every
-  other request is still refused.
+* **Friend invite landing page** (optional setting): friends away from home land on a thank-you page instead of an
+  error. Point it at the project's hosted page on GitHub Pages (nothing of yours is exposed: with it set, Home
+  Assistant answers nothing from the internet), or at a bare `https://` address of your own Home Assistant. It
+  must be an `https://` address. See [Friends away from home](README.md#friends-away-from-home-optional).
 
 * **Themed pages**: the pages shown after a Kakao login or friend invite (thank-you, permissions
   not accepted, login errors) and the setup page now use the project icon and colours, in light and
