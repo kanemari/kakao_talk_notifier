@@ -17,6 +17,7 @@ SERVICE_SEND_MESSAGE = "send_message"
 SERVICE_LIST_FRIENDS = "list_friends"
 SERVICE_LOGIN = "login"
 SERVICE_FRIEND_INVITE_LINK = "friend_invite_link"
+SERVICE_LINK_FRIEND = "link_friend"
 
 SESSION_FILE = "kakao.session"
 

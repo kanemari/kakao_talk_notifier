@@ -108,3 +108,20 @@ friend_invite_link:
     cannot log anyone in to this integration. The friend must already be invited
     under App > Member in the Kakao Developers console. For friends away from
     home, set a friend invite landing page in the integration settings.
+
+link_friend:
+  name: Link a friend
+  description: >-
+    Link a friend to your Kakao app with the code their invite page showed (administrators only).
+    Kakao links a friend only when that code is exchanged, which needs your Client secret, so a
+    hosted landing page shows the code for the friend to send you. The friend's token is not
+    kept and cannot log anyone in. They appear in list_friends after Kakao's cache (about
+    10 minutes).
+  fields:
+    code:
+      name: Code
+      description: The code the friend's page showed, or the whole address they were sent to.
+      required: true
+      example: "Hk3pQ9xZ-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      selector:
+        text:

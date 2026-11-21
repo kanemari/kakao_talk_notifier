@@ -10,6 +10,8 @@ from custom_components.kakao_talk.const import DOMAIN
 from .conftest import CONFIG, TOKEN_URL, posts
 
 INVITE_STATE = "kakao_talk_invite"
+# A plausible one-time code (Kakao's are long URL-safe text).
+CODE = "Hk3pQ9xZ" + "a" * 50
 
 
 async def invite(hass, **kwargs):
@@ -80,12 +82,16 @@ async def test_admin_only(hass, entry, hass_read_only_user, hass_admin_user):
 # ------------------------------------------------------------------ callback
 async def test_callback_thanks_the_friend_and_ignores_the_code(hass, entry, hass_client, kakao_api):
     client = await hass_client()
-    resp = await client.get(f"/api/kakao_talk?code=friendcode&state={INVITE_STATE}", allow_redirects=False)
+    resp = await client.get(f"/api/kakao_talk?code={CODE}&state={INVITE_STATE}", allow_redirects=False)
     assert resp.status == 200
     assert resp.headers["Content-Type"].startswith("text/html")
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert "Your permission was recorded" in await resp.text()
-    assert posts(kakao_api, TOKEN_URL) == []  # the code is never exchanged
+    # Kakao links a friend only when their code is exchanged, so it is: once, for that code
+    [body] = posts(kakao_api, TOKEN_URL)
+    assert body["grant_type"] == "authorization_code" and body["code"] == CODE
+    assert body["redirect_uri"] == "http://192.168.1.10:8123/api/kakao_talk"
+    assert body["client_secret"] == "secret"
 
 
 async def test_friend_cannot_replace_the_login(hass, entry, hass_client, kakao_api):
@@ -93,13 +99,17 @@ async def test_friend_cannot_replace_the_login(hass, entry, hass_client, kakao_a
     cfg = hass.data[DOMAIN]["config"]
     before = (cfg._access_token, cfg._refresh_token)
     client = await hass_client()
+    session_before = await hass.async_add_executor_job(lambda: open(hass.config.path("kakao.session")).read())
+    live_before = dict(cfg._login_states)
     for _ in range(3):  # can be used any number of times
-        resp = await client.get(f"/api/kakao_talk?code=friendcode&state={INVITE_STATE}", allow_redirects=False)
+        resp = await client.get(f"/api/kakao_talk?code={CODE}&state={INVITE_STATE}", allow_redirects=False)
         assert resp.status == 200
+    # the friend's code was exchanged each time, but nothing it returned was kept
+    assert len(posts(kakao_api, TOKEN_URL)) == 3
     assert (cfg._access_token, cfg._refresh_token) == before
-    assert posts(kakao_api, TOKEN_URL) == []
-    path = hass.config.path("kakao.session")
-    assert (await hass.async_add_executor_job(lambda: open(path).read())) == "rt"
+    assert cfg._login_states == live_before
+    session_after = await hass.async_add_executor_job(lambda: open(hass.config.path("kakao.session")).read())
+    assert session_after == session_before == "rt"
 
 
 async def test_invite_marker_needs_a_code(hass, entry, hass_client, kakao_api):
@@ -162,27 +172,27 @@ async def test_internet_gets_nothing_without_a_public_address(hass, entry, hass_
 
 async def test_internet_may_reach_only_the_invite_thank_you(hass, public_entry, hass_client, kakao_api, from_internet):
     client = await hass_client()
-    resp = await client.get(f"/api/kakao_talk?code=friendcode&state={INVITE_STATE}", allow_redirects=False)
+    resp = await client.get(f"/api/kakao_talk?code={CODE}&state={INVITE_STATE}", allow_redirects=False)
     assert resp.status == 200
     body = await resp.text()
     assert "<h1>Thank you</h1>" in body
     assert "Your permission was recorded. You can close this page." in body
     assert resp.headers["Content-Type"].startswith("text/html")
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
-    assert posts(kakao_api, TOKEN_URL) == []
+    assert len(posts(kakao_api, TOKEN_URL)) == 1  # linked: the code was exchanged
 
 
 async def test_internet_page_never_shows_text_from_the_request(hass, public_entry, hass_client, from_internet):
     """No content spoofing: a stranger cannot make your address display their words."""
     client = await hass_client()
     bait = "Your-account-is-locked-call-555-0100"
-    for query in (
-        f"?error={bait}&error_description={bait}&state={INVITE_STATE}",
-        f"?code={bait}&state={INVITE_STATE}",
-        f"?code=c&state={INVITE_STATE}&error_description={bait}&foo={bait}",
+    for query, status in (
+        (f"?error={bait}&error_description={bait}&state={INVITE_STATE}", 200),
+        (f"?code={bait}&state={INVITE_STATE}", 200),  # a plausible code: exchanged, fixed text back
+        (f"?code=c&state={INVITE_STATE}&error_description={bait}&foo={bait}", 400),  # not a code
     ):
         resp = await client.get("/api/kakao_talk" + query)
-        assert resp.status == 200
+        assert resp.status == status
         assert bait not in await resp.text()
 
 
@@ -202,13 +212,14 @@ async def test_internet_duplicate_parameters_cannot_reach_a_login(hass, public_e
     cfg = hass.data[DOMAIN]["config"]
     monkeypatch.setattr("custom_components.kakao_talk.http.is_cloud_connection", lambda h: True)
     client = await hass_client()
-    # marker first: treated as an invite, the code is ignored
-    resp = await client.get(f"/api/kakao_talk?state={INVITE_STATE}&state={state}&code=evil", allow_redirects=False)
+    # marker first: treated as an invite, its code is exchanged and the token dropped
+    resp = await client.get(f"/api/kakao_talk?state={INVITE_STATE}&state={state}&code={CODE}", allow_redirects=False)
     assert resp.status == 200 and "Thank you" in await resp.text()
     # real state first: not an invite, so refused from the internet
-    resp = await client.get(f"/api/kakao_talk?state={state}&state={INVITE_STATE}&code=evil", allow_redirects=False)
+    resp = await client.get(f"/api/kakao_talk?state={state}&state={INVITE_STATE}&code={CODE}", allow_redirects=False)
     assert resp.status == 403
-    assert posts(kakao_api, TOKEN_URL) == []
+    assert len(posts(kakao_api, TOKEN_URL)) == 1  # only the invite's code reached Kakao
+    assert cfg._access_token is None or cfg._access_token == "at"  # nothing the friend's token set
     assert state in cfg._login_states  # the administrator's login is still usable
     assert cfg._refresh_token == "rt"
 

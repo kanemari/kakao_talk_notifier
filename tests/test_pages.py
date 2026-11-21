@@ -8,7 +8,7 @@ import pytest
 from custom_components.kakao_talk import pages
 from custom_components.kakao_talk.const import DOMAIN
 
-from .test_invite import INVITE_STATE, from_internet, public_entry  # noqa: F401  (fixtures)
+from .test_invite import CODE, INVITE_STATE, from_internet, public_entry  # noqa: F401  (fixtures)
 
 
 def sha(text):
@@ -66,7 +66,7 @@ def test_script_only_removes_the_query_from_the_address():
 # ------------------------------------------------------------------ over HTTP
 async def test_thank_you_response_headers(hass, public_entry, hass_client, from_internet):
     client = await hass_client()
-    resp = await client.get(f"/api/kakao_talk?code=c&state={INVITE_STATE}")
+    resp = await client.get(f"/api/kakao_talk?code={CODE}&state={INVITE_STATE}")
     assert resp.status == 200
     assert resp.headers["Content-Security-Policy"] == pages.CSP
     assert resp.headers["Cache-Control"] == "no-store"
@@ -79,13 +79,13 @@ async def test_thank_you_response_headers(hass, public_entry, hass_client, from_
 async def test_nothing_from_the_request_reaches_a_public_page(hass, public_entry, hass_client, from_internet):
     client = await hass_client()
     bait = "Zq9-bait-text-0100"
-    for query in (
-        f"?code={bait}&state={INVITE_STATE}",
-        f"?code=c&state={INVITE_STATE}&error_description={bait}&x={bait}",
-        f"?error={bait}&error_description={bait}&state={INVITE_STATE}",
+    for query, status in (
+        (f"?code={bait}&state={INVITE_STATE}", 200),
+        (f"?code=c&state={INVITE_STATE}&error_description={bait}&x={bait}", 400),  # not a code
+        (f"?error={bait}&error_description={bait}&state={INVITE_STATE}", 200),
     ):
         resp = await client.get("/api/kakao_talk" + query)
-        assert resp.status == 200
+        assert resp.status == status
         assert bait not in await resp.text()
 
 
