@@ -7,8 +7,10 @@
 * **Friend invite link**: the new `kakao_talk.friend_invite_link` action (administrators
   only) gives you a link to send to a friend. They open it, sign in to Kakao and agree to
   the friends and message permissions, instead of having to use the Kakao console's REST API
-  test. The link cannot start, replace or complete a login. See
-  [Sending to friends](README.md#sending-to-friends).
+  test. Kakao links a friend to the app only when their one-time code is exchanged for a token, so Home Assistant
+  exchanges it (and throws the token away) when the friend returns to it, or you run the new
+  `kakao_talk.link_friend` action with the code the hosted landing page shows the friend. The link cannot start,
+  replace or complete a login. See [Enrolling each friend](README.md#enrolling-each-friend).
 * **Pick friends by name**: every friend Kakao returns becomes a notify entity ("KakaoTalk
   Alice"), and `kakao_talk.send_message` has a **Targets** picker listing them, instead of
   typing names or looking them up with `list_friends`. Home Assistant's `notify.send_message`
@@ -17,8 +19,8 @@
   friends stored as entities. See [Picking friends by name](README.md#picking-friends-by-name).
 * **Friend invite landing page** (optional setting): friends away from home land on a thank-you page instead of an
   error. Point it at the project's hosted page on GitHub Pages (nothing of yours is exposed: with it set, Home
-  Assistant answers nothing from the internet), or at a bare `https://` address of your own Home Assistant. It
-  must be an `https://` address. See [Friends away from home](README.md#friends-away-from-home-optional).
+  Assistant answers nothing from the internet; the page shows the friend a code to send you), or at a bare
+  `https://` address of your own Home Assistant (it links the friend itself). It must be an `https://` address. See [Friends away from home](README.md#friends-away-from-home-optional).
 
 * **Themed pages**: the pages shown after a Kakao login or friend invite (thank-you, permissions
   not accepted, login errors) and the setup page now use the project icon and colours, in light and
@@ -38,6 +40,8 @@
 
 ### Security
 
+* A friend's code is sent to Kakao only if it looks like one, at most 6 a minute, and the token that comes back is
+  discarded; the answer is always fixed text and the code is masked out of anything logged.
 * A completed Kakao login now creates a "KakaoTalk login completed" notification, so an
   unexpected login is noticed.
 * Friend invites require a Client secret, so a friend's one-time code is useless to anyone

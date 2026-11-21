@@ -10,7 +10,7 @@ from custom_components.kakao_talk.const import DOMAIN
 from custom_components.kakao_talk.http import INVITE_DECLINED, INVITE_THANKS
 
 from .conftest import CONFIG, TOKEN_URL, posts
-from .test_invite import INVITE_STATE, from_internet  # noqa: F401  (fixture)
+from .test_invite import CODE, INVITE_STATE, from_internet  # noqa: F401  (fixture)
 from .test_pages import sha
 
 HOSTED = "https://kanemari.github.io/kakao_talk_notifier/invite-done.html"
@@ -49,22 +49,30 @@ def test_the_page_loads_nothing_and_links_nowhere():
 
 def test_the_page_has_three_fixed_states_and_only_the_neutral_one_shows_without_scripts():
     sections = re.findall(r'<section id="(\w+)"( hidden)?>', PAGE)
-    assert sections == [("neutral", ""), ("ok", " hidden"), ("declined", " hidden")]
+    assert sections == [("neutral", ""), ("relay", " hidden"), ("declined", " hidden")]
 
 
 def test_the_script_only_picks_a_block_and_clears_the_address():
     script = pages.LANDING_SCRIPT
     assert "history.replaceState(null,'',location.pathname)" in script
-    # it reads the address only to test for "error=" and "code=" and never writes it anywhere
-    for forbidden in ("innerHTML", "innerText", "textContent", "document.write", "eval", "fetch"):
+    # the code is shown only if it is plain URL-safe text, and only as text
+    assert "/^[A-Za-z0-9_-]{10,512}$/.test(c)" in script
+    assert "getElementById('code').textContent=c" in script
+    for forbidden in ("innerHTML", "outerHTML", "insertAdjacent", "document.write", "eval", "fetch",
+                      "XMLHttpRequest", "sendBeacon", "window.open", "location.href", "location.replace",
+                      "localStorage", "cookie"):
         assert forbidden not in script
+    # the only thing it does with the code besides showing it is the Copy button
+    assert script.count("c)") >= 1 and "navigator.clipboard.writeText(c)" in script
 
 
 def test_the_page_says_the_same_as_the_pages_home_assistant_serves():
-    assert pages.LANDING_TEXT["ok"][1] == INVITE_THANKS
     assert pages.LANDING_TEXT["declined"][1] == INVITE_DECLINED
-    assert pages.LANDING_TEXT["ok"][0] == "Thank you"
     assert pages.LANDING_TEXT["declined"][0] == "Permissions not accepted"
+    # the hosted page cannot link anyone itself, so it asks the friend to send the code on
+    assert pages.LANDING_TEXT["relay"][0] == "One more step"
+    assert "Send this code to the person who invited you" in pages.LANDING_TEXT["relay"][1]
+    assert INVITE_THANKS  # (the page Home Assistant serves after it has linked them itself)
 
 
 # ------------------------------------------------------------------ the setting
@@ -114,7 +122,7 @@ async def test_a_hosted_page_means_home_assistant_answers_nothing_from_the_inter
 async def test_a_hosted_page_still_lets_you_finish_things_at_home(hass, kakao_api, hass_client):
     await hosted_entry(hass)
     client = await hass_client()
-    resp = await client.get(f"/api/kakao_talk?code=c&state={INVITE_STATE}")
+    resp = await client.get(f"/api/kakao_talk?code={CODE}&state={INVITE_STATE}")
     assert resp.status == 200 and "Your permission was recorded" in await resp.text()
     assert (await client.get("/api/kakao_talk")).status == 200
 

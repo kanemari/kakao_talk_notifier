@@ -1,12 +1,15 @@
+import asyncio
 import json
 import logging
 import mimetypes
 import os
+import re
 import secrets
 import time
+from collections import deque
 from ipaddress import ip_address
 from pathlib import Path
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import aiohttp
 import voluptuous as vol
@@ -51,6 +54,7 @@ from .const import (
     KAKAO_TALK_API_ENDPOINT,
     SERVICE_LIST_FRIENDS,
     SERVICE_FRIEND_INVITE_LINK,
+    SERVICE_LINK_FRIEND,
     SERVICE_LOGIN,
     SERVICE_SEND_MESSAGE,
     SESSION_FILE,
@@ -86,14 +90,24 @@ LOGIN_STATE_SECONDS = 600
 MAX_LOGIN_STATES = 5
 LOGIN_NOTIFICATION_ID = "kakao_talk_login"
 INVITE_NOTIFICATION_ID = "kakao_talk_friend_invite"
-# Fixed marker for friend invite links. The callback never exchanges the code of an
-# invite, so it cannot start, replace or complete a login (see KakaoTalkView.get).
+# Fixed marker for friend invite links. Kakao links a friend to the app only when their
+# one-time code is exchanged for a token, so the callback exchanges an invite's code and
+# throws the token away: nothing is stored, so it cannot start, replace or complete a
+# login (see KakaoConfig.async_link_friend and KakaoTalkView.get).
 INVITE_STATE = "kakao_talk_invite"
+FRIEND_LINKED_NOTIFICATION_ID = "kakao_talk_friend_linked"
+# Requests that reach Kakao per window, so a stranger cannot use the page to make us spam it.
+LINK_ATTEMPTS = 6
+LINK_WINDOW_SECONDS = 60
 INVITE_THANKS = "Your permission was recorded. You can close this page."
 # Fixed text: nothing from the request is ever shown on a page the internet can reach.
 INVITE_DECLINED = (
     "Permissions were not accepted. If you want to try again, ask the person who "
     "invited you for the link and open it once more."
+)
+INVITE_FAILED = (
+    "Something went wrong and your permission could not be completed. Please ask the "
+    "person who invited you for a new link."
 )
 LOGIN_DONE_NOTIFICATION_ID = "kakao_talk_login_done"
 
@@ -176,6 +190,31 @@ def _clean_for_log(value, limit=200):
     return text[:limit]
 
 
+# Kakao's one-time codes are URL-safe text. Anything else is not a code.
+_CODE_RE = re.compile(r"[A-Za-z0-9_\-]{10,512}")
+
+
+def _extract_code(text):
+    """The one-time code in `text`: the code itself, or an address that contains code=...
+
+    Returns None unless it is plausibly a code, so nothing else is ever sent to Kakao.
+    """
+    text = str(text or "").strip()
+    if "code=" in text:
+        try:
+            query = urlsplit(text).query or text.split("?", 1)[-1]
+            values = parse_qs(query).get("code")
+        except ValueError:
+            values = None
+        text = (values or [""])[0]
+    return text if _CODE_RE.fullmatch(text) else None
+
+
+def _mask(text, secret):
+    """`text` without the secret in it (Kakao's errors can repeat the code we sent)."""
+    return str(text).replace(secret, "[code]") if secret else str(text)
+
+
 def _plain(text, status=200):
     """A plain-text response that browsers must not reinterpret as HTML."""
     return web.Response(
@@ -240,6 +279,8 @@ class KakaoConfig:
         # Open the image itself (not Home Assistant) when an image message is tapped.
         self._link_to_image = bool(config.get(CONF_LINK_TO_IMAGE))
         self._login_states = {}
+        self._link_attempts = deque()
+        self._link_lock = asyncio.Lock()
         self._send_to_friends = config.get(CONF_SEND_TO_FRIENDS)
         # Show each friend as a notify entity (on unless the owner turned it off).
         self._friend_entities = bool(config.get(CONF_FRIEND_ENTITIES, True))
@@ -393,10 +434,11 @@ class KakaoConfig:
     def invite_url(self):
         """Kakao consent link to give to a friend, so Kakao records their permission.
 
-        The friend signs in and agrees to the friends and message permissions. The
-        link carries a fixed marker as `state`; when Kakao sends the friend back, the
-        callback shows a thank-you page and ignores the code. It cannot log anyone in
-        to this integration, so it is safe to share with the people you invited.
+        The friend signs in and agrees to the friends and message permissions. When Kakao
+        sends them back, their one-time code is exchanged (by the callback, or by
+        kakao_talk.link_friend with a code relayed from a hosted page) so that Kakao links
+        them to the app; the token that returns is discarded, so the link cannot log anyone
+        in to this integration.
         """
         return OAUTH_AUTHORIZE_URL + "?" + urlencode(
             {
@@ -406,6 +448,66 @@ class KakaoConfig:
                 "scope": "talk_message,friends",
                 "state": INVITE_STATE,
             }
+        )
+
+    def allow_link_attempt(self):
+        """False once too many friend codes were sent to Kakao in the last minute."""
+        now = time.monotonic()
+        while self._link_attempts and now - self._link_attempts[0] > LINK_WINDOW_SECONDS:
+            self._link_attempts.popleft()
+        if len(self._link_attempts) >= LINK_ATTEMPTS:
+            return False
+        self._link_attempts.append(now)
+        return True
+
+    async def async_link_friend(self, code):
+        """Link a friend to the app by exchanging their one-time code, then forget the token.
+
+        Kakao links a user to an app when the code is exchanged for a token, and the friends
+        list only returns linked friends who agreed to the friends permission. The token
+        that comes back is the friend's, not ours: it is never stored, logged or used, so
+        this cannot start, replace or complete a login.
+
+        Returns {"linked": True, "scopes": [...]} or {"linked": False, "error": "..."}.
+        """
+        async with self._link_lock:
+            res = await self._post_form(
+                OAUTH_TOKEN_URL,
+                self._token_payload(
+                    "authorization_code", redirect_uri=self.invite_redirect_uri(), code=code
+                ),
+            )
+        if not res or "access_token" not in res:
+            reason = (res or {}).get("error_description") or (res or {}).get("error") or "no reply"
+            return {"linked": False, "error": _mask(_clean_for_log(reason, 160), code)}
+        scopes = str(res.get("scope") or "").replace(",", " ").split()
+        del res  # the friend's token is dropped here, on purpose
+        return {"linked": True, "scopes": scopes}
+
+    def announce_friend_linked(self, result):
+        """Tell the administrators that a friend linked, and what they agreed to."""
+        scopes = result.get("scopes") or []
+        parts = ["A friend agreed through a friend invite and is now linked to your Kakao app."]
+        if scopes:
+            parts.append("Permissions they agreed to: " + ", ".join(scopes) + ".")
+        else:
+            parts.append("Kakao did not report which permissions they agreed to.")
+        if scopes and "friends" not in scopes:
+            parts.append(
+                "They did NOT agree to the friends list, so Kakao will not return them in "
+                "kakao_talk.list_friends. Ask them to open the invite link again and agree "
+                "to everything it asks."
+            )
+        else:
+            parts.append(
+                "Kakao caches the friends list for about 10 minutes, so they can take that "
+                "long to appear in kakao_talk.list_friends."
+            )
+        persistent_notification.async_create(
+            self.hass,
+            " ".join(parts),
+            title="KakaoTalk friend linked",
+            notification_id=FRIEND_LINKED_NOTIFICATION_ID,
         )
 
     async def _post_form(self, url, data, headers=None):
@@ -811,6 +913,7 @@ def async_unregister_services(hass):
         SERVICE_LIST_FRIENDS,
         SERVICE_LOGIN,
         SERVICE_FRIEND_INVITE_LINK,
+        SERVICE_LINK_FRIEND,
     ):
         hass.services.async_remove(DOMAIN, service)
 
@@ -935,14 +1038,44 @@ def async_register_services(hass, config):
             f"[Friend invite link]({url})\n\n"
             "Send this link to a friend you have invited under App > Member in the "
             "Kakao Developers console. They open it, sign in to Kakao and agree. "
-            "It can be used by any number of friends and does not expire. It cannot "
-            "log anyone in to Home Assistant or replace your own Kakao login.",
+            "If you set a hosted Friend invite landing page, they then see a code: ask "
+            "them to send it to you and run kakao_talk.link_friend with it, because Kakao "
+            "links a friend only when that code is exchanged. It can be used by any number "
+            "of friends and does not expire. It cannot log anyone in to Home Assistant or "
+            "replace your own Kakao login.",
             title="KakaoTalk friend invite",
             notification_id=INVITE_NOTIFICATION_ID,
         )
         if call.return_response:
             return {"url": url}
         return None
+
+    async def link_friend_handler(call: ServiceCall):
+        """Link a friend to the app with the code their landing page showed.
+
+        Only a Home Assistant administrator may do this. The friend's token is dropped.
+        """
+        await _require_admin(call)
+        code = _extract_code(call.data["code"])
+        if code is None:
+            raise ServiceValidationError(
+                "That does not look like a code. Paste the code the friend's page showed, "
+                "or the whole address they were sent to."
+            )
+        result = await config.async_link_friend(code)
+        if not result["linked"]:
+            raise HomeAssistantError(
+                f"Kakao refused the code: {result['error']}. A code works once and only for a "
+                "short time, and only with an invite link made under the current Friend "
+                "invite landing page setting. Ask the friend for a new link."
+            )
+        config.announce_friend_linked(result)
+        return {
+            "linked": True,
+            "permissions": result["scopes"],
+            "note": "Kakao caches the friends list for about 10 minutes, so the friend can "
+            "take that long to appear in kakao_talk.list_friends.",
+        }
 
     async def login_handler(call: ServiceCall):
         """Start a Kakao login. Only a Home Assistant admin may do this.
@@ -1003,6 +1136,13 @@ def async_register_services(hass, config):
         schema=vol.Schema({}),
         supports_response=SupportsResponse.OPTIONAL,
     )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_LINK_FRIEND,
+        link_friend_handler,
+        schema=vol.Schema({vol.Required("code"): vol.All(cv.string, vol.Length(min=1, max=2000))}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
 
 
 class KakaoTalkView(HomeAssistantView):
@@ -1060,15 +1200,25 @@ class KakaoTalkView(HomeAssistantView):
             return _plain("KakaoTalk is not set up.", 503)
 
         if is_invite:
-            # The code is deliberately never exchanged: no token is requested, nothing
-            # is stored and no login happens.
             if "error" in query:
                 _LOGGER.debug(
                     "A friend invite was declined or failed: %s",
                     _clean_for_log(query.get("error"), 60),
                 )
                 return _themed("Permissions not accepted", INVITE_DECLINED, ok=False)
-            _LOGGER.debug("A friend followed the invite link and gave their permission")
+            # The friend agreed. Kakao links a friend to the app only when their one-time
+            # code is exchanged for a token, so exchange it and throw the token away:
+            # nothing is stored and no login happens (see KakaoConfig.async_link_friend).
+            code = _extract_code(query.get("code"))
+            if code is None:
+                return _themed("Could not link you", INVITE_FAILED, ok=False, status=400)
+            if not config.allow_link_attempt():
+                return _plain("Too many requests. Please try again in a minute.", 429)
+            result = await config.async_link_friend(code)
+            if not result["linked"]:
+                _LOGGER.debug("A friend's code was refused: %s", result["error"])
+                return _themed("Could not link you", INVITE_FAILED, ok=False)
+            config.announce_friend_linked(result)
             return _themed("Thank you", INVITE_THANKS)
 
         if "error" in query:
