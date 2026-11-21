@@ -1049,8 +1049,8 @@ class KakaoTalkView(HomeAssistantView):
         is_invite = query.get("state") == INVITE_STATE and (
             "code" in query or "error" in query
         )
-        # Only that answer may be reached from the internet, and only if the owner
-        # use a bare address of this Home Assistant as the landing page. Everything else must be local.
+        # Only that answer may be reached from the internet, and only if the owner uses a
+        # bare address of this Home Assistant as the landing page. Everything else must be local.
         allow_remote = is_invite and config is not None and config.invite_is_public
         if not allow_remote and not _is_local_request(self._hass, request):
             _log_blocked(request.remote)
