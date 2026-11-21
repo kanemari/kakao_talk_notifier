@@ -215,6 +215,21 @@ def _mask(text, secret):
     return str(text).replace(secret, "[code]") if secret else str(text)
 
 
+DEVELOPERS_URL = "https://developers.kakao.com/"
+
+
+def _friend_message(url, relay):
+    """A message the administrator can send to a friend: sign up, open the link, send the code."""
+    steps = [
+        "1. Sign in to Kakao Developers with your Kakao account (it creates a developer "
+        "account if you have none) and accept my team invitation: " + DEVELOPERS_URL,
+        "2. Open this link, sign in to Kakao and tap Agree: " + url,
+    ]
+    if relay:
+        steps.append("3. You will then see a code. Please send it to me.")
+    return "Hi! To get my Home Assistant notifications on KakaoTalk, please:\n" + "\n".join(steps)
+
+
 def _plain(text, status=200):
     """A plain-text response that browsers must not reinterpret as HTML."""
     return web.Response(
@@ -1033,21 +1048,31 @@ def async_register_services(hass, config):
                 "KakaoTalk Notifier settings, then run kakao_talk.login again."
             )
         url = config.invite_url()
+        redirect = config.invite_redirect_uri()
+        relay = config.invite_uses_hosted_page
+        message = _friend_message(url, relay)
         persistent_notification.async_create(
             hass,
             f"[Friend invite link]({url})\n\n"
-            "Send this link to a friend you have invited under App > Member in the "
-            "Kakao Developers console. They open it, sign in to Kakao and agree. "
-            "If you set a hosted Friend invite landing page, they then see a code: ask "
-            "them to send it to you and run kakao_talk.link_friend with it, because Kakao "
-            "links a friend only when that code is exchanged. It can be used by any number "
-            "of friends and does not expire. It cannot log anyone in to Home Assistant or "
-            "replace your own Kakao login.",
+            "**Register this Redirect URI at Kakao**, if you have not already "
+            "(App > Platform Key > REST API key > Redirect URI):\n\n"
+            f"`{redirect}`\n\n"
+            "**A message you can send to your friend** (they must also be invited under "
+            "App > Member in the Kakao Developers console):\n\n"
+            f"```\n{message}\n```\n\n"
+            + (
+                "When they send you the code, run kakao_talk.link_friend with it: Kakao "
+                "links a friend only when that code is exchanged. "
+                if relay
+                else ""
+            )
+            + "The link can be used by any number of friends and does not expire. It "
+            "cannot log anyone in to Home Assistant or replace your own Kakao login.",
             title="KakaoTalk friend invite",
             notification_id=INVITE_NOTIFICATION_ID,
         )
         if call.return_response:
-            return {"url": url}
+            return {"url": url, "redirect_uri": redirect, "message": message}
         return None
 
     async def link_friend_handler(call: ServiceCall):

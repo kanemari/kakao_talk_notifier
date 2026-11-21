@@ -104,10 +104,12 @@ friend_invite_link:
   description: >-
     Get a link to send to a friend so they can give their permission (friends
     list and messages) with a normal Kakao sign-in, instead of using the Kakao
-    console. Administrators only. Creates a notification with the link, which
-    cannot log anyone in to this integration. The friend must already be invited
-    under App > Member in the Kakao Developers console. For friends away from
-    home, set a friend invite landing page in the integration settings.
+    console. Administrators only. Creates a notification with the link (which
+    cannot log anyone in to this integration), the Redirect URI to register at
+    Kakao, and a message you can send to the friend, including where to sign up
+    to Kakao Developers. The friend must also be invited under App > Member in
+    the Kakao Developers console. For friends away from home, set a friend invite
+    landing page in the integration settings.
 
 link_friend:
   name: Link a friend

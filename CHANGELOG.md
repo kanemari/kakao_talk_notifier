@@ -9,8 +9,9 @@
   the friends and message permissions, instead of having to use the Kakao console's REST API
   test. Kakao links a friend to the app only when their one-time code is exchanged for a token, so Home Assistant
   exchanges it (and throws the token away) when the friend returns to it, or you run the new
-  `kakao_talk.link_friend` action with the code the hosted landing page shows the friend. The link cannot start,
-  replace or complete a login. See [Enrolling each friend](README.md#enrolling-each-friend).
+  `kakao_talk.link_friend` action with the code the hosted landing page shows the friend. The invite notification
+  also shows the Redirect URI to register at Kakao and a ready-to-send message for the friend, including the link
+  to sign up to Kakao Developers. The link cannot start, replace or complete a login. See [Enrolling each friend](README.md#enrolling-each-friend).
 * **Pick friends by name**: every friend Kakao returns becomes a notify entity ("KakaoTalk
   Alice"), and `kakao_talk.send_message` has a **Targets** picker listing them, instead of
   typing names or looking them up with `list_friends`. Home Assistant's `notify.send_message`
