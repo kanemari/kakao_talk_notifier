@@ -8,3 +8,4 @@
 
 # Shell scripts must keep Unix line endings, even on Windows checkouts.
 *.sh text eol=lf
+docs/invite-done.html text eol=lf
